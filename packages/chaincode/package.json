@@ -1,0 +1,22 @@
+{
+  "name": "@trusttrace/chaincode",
+  "version": "1.0.0",
+  "description": "Hyperledger Fabric v2.5 Smart Contracts for TrustTrace Provenance Consortium",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "fabric-chaincode-node start",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node test/runner.js"
+  },
+  "dependencies": {
+    "fabric-contract-api": "^2.5.8",
+    "fabric-shim-api": "^2.5.8",
+    "fast-safe-stringify": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "typescript": "^5.6.3"
+  }
+}

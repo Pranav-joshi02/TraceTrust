@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strictPropertyInitialization": false,
+    "declaration": false,
+    "baseUrl": ".",
+    "paths": {
+      "@trusttrace/epcis": ["../../packages/epcis/dist"],
+      "@trusttrace/crypto": ["../../packages/crypto/dist"],
+      "@trusttrace/types": ["../../packages/types/dist"],
+      "@trusttrace/database": ["../../packages/database/dist"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,597 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum OrganizationType {
+  SUPPLIER
+  MANUFACTURER
+  LOGISTICS
+  WAREHOUSE
+  RETAILER
+  AUDITOR
+  REGULATOR
+  ADMIN
+}
+
+enum OrganizationStatus {
+  PENDING
+  VERIFIED
+  SUSPENDED
+  REVOKED
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+enum BatchStatus {
+  CREATED
+  IN_PRODUCTION
+  AVAILABLE
+  IN_TRANSIT
+  RECEIVED
+  SOLD
+  RECALLED
+}
+
+enum EventType {
+  CREATED
+  MANUFACTURED
+  TRANSFORMED
+  QUALITY_CHECKED
+  PACKED
+  SHIPPED
+  RECEIVED
+  TRANSFERRED
+  SOLD
+  RECALLED
+}
+
+enum TrustStatus {
+  PENDING
+  VALIDATING
+  VERIFIED
+  SUSPICIOUS
+  REJECTED
+  DISPUTED
+}
+
+enum BlockchainStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}
+
+enum ParticipantRole {
+  SOURCE
+  DESTINATION
+  INSPECTOR
+  APPROVER
+  AUDITOR
+  WITNESS
+}
+
+enum ParticipationStatus {
+  PENDING
+  SIGNED
+  DECLINED
+}
+
+enum TrustCheckType {
+  IDENTITY
+  AUTHORIZATION
+  SIGNATURE
+  DOCUMENT
+  CERTIFICATE
+  EVENT_SEQUENCE
+  DUPLICATE
+  BUSINESS_RULE
+  ANOMALY
+  EVIDENCE_HASH
+}
+
+enum CheckStatus {
+  PASSED
+  FAILED
+  WARNING
+}
+
+enum EndorsementType {
+  REQUIRED
+  OPTIONAL
+}
+
+enum EndorsementDecision {
+  PENDING
+  APPROVED
+  REJECTED
+  ABSTAINED
+}
+
+enum EvidenceType {
+  INVOICE
+  CERTIFICATE
+  QUALITY_REPORT
+  SHIPPING_DOCUMENT
+  INSPECTION_REPORT
+  PROOF_OF_ORIGIN
+  OTHER
+}
+
+enum EvidenceVerificationStatus {
+  PENDING
+  MATCHED
+  MISMATCHED
+  INVALID
+}
+
+enum CertificateStatus {
+  PENDING
+  VALID
+  EXPIRED
+  REVOKED
+  INVALID
+}
+
+enum RecallSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecallStatus {
+  OPEN
+  INVESTIGATING
+  ACTIVE
+  RESOLVED
+  CLOSED
+}
+
+enum RecallImpactStatus {
+  AFFECTED
+  CLEARED
+  UNKNOWN
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+  ESCALATED
+}
+
+enum QrCodeStatus {
+  ACTIVE
+  DISABLED
+}
+
+model Organization {
+  id                   String                   @id @default(uuid())
+  name                 String
+  legalName            String
+  organizationCode     String                   @unique
+  organizationType     OrganizationType
+  registrationNumber   String?                  @unique
+  country              String
+  address              String?
+  email                String?
+  phone                String?
+  status               OrganizationStatus       @default(PENDING)
+  fabricMspId          String?                  @unique
+  fabricOrgName        String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  users                User[]
+  products             Product[]
+  credentials          OrganizationCredential[]
+  certificates         Certificate[]
+  currentBatches       Batch[]                  @relation("CurrentOwner")
+  sourceEvents         TraceEvent[]             @relation("SourceOrganization")
+  destinationEvents    TraceEvent[]             @relation("DestinationOrganization")
+  eventParticipants    EventParticipant[]
+  endorsements         EventEndorsement[]
+  documents            Document[]
+  initiatedRecalls     Recall[]
+  raisedDisputes       Dispute[]                @relation("RaisedBy")
+  targetedDisputes     Dispute[]                @relation("AgainstOrg")
+  auditLogs            AuditLog[]
+  apiKeys              ApiKey[]
+}
+
+model User {
+  id                   String             @id @default(uuid())
+  organizationId       String
+  email                String             @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  status               UserStatus         @default(ACTIVE)
+  fabricCertificateRef String?
+  lastLoginAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  organization         Organization       @relation(fields: [organizationId], references: [id])
+  roles                UserRole[]
+  createdProducts      Product[]
+  createdBatches       Batch[]
+  createdEvents        TraceEvent[]
+  endorsements         EventEndorsement[]
+  uploadedDocuments    Document[]
+  verifiedEvidence     EventEvidence[]    @relation("EvidenceVerifier")
+  resolvedDisputes     Dispute[]          @relation("DisputeResolver")
+  auditLogs            AuditLog[]
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model OrganizationCredential {
+  id                 String       @id @default(uuid())
+  organizationId     String
+  credentialType     String
+  issuer             String
+  credentialReference String
+  credentialHash     String
+  issuedAt           DateTime
+  expiresAt          DateTime?
+  status             CertificateStatus @default(VALID)
+  verificationMethod String?
+  createdAt          DateTime     @default(now())
+  organization       Organization @relation(fields: [organizationId], references: [id])
+}
+
+model Product {
+  id              String        @id @default(uuid())
+  organizationId  String
+  productCode     String        @unique
+  sku             String?
+  gtin            String?
+  name            String
+  description     String?
+  category        String?
+  unitOfMeasure   String?
+  status          ProductStatus @default(ACTIVE)
+  metadata        Json?
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  createdBy       User?         @relation(fields: [createdById], references: [id])
+  batches         Batch[]
+  events          TraceEvent[]
+
+  @@index([productCode])
+  @@index([gtin])
+}
+
+model Batch {
+  id                String       @id @default(uuid())
+  productId         String
+  batchCode         String       @unique
+  quantity          Decimal
+  unit              String
+  productionDate    DateTime?
+  expiryDate        DateTime?
+  currentOwnerOrgId String
+  status            BatchStatus  @default(CREATED)
+  originLocation    String?
+  metadata          Json?
+  createdById       String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  product           Product      @relation(fields: [productId], references: [id])
+  currentOwner      Organization @relation("CurrentOwner", fields: [currentOwnerOrgId], references: [id])
+  createdBy         User?        @relation(fields: [createdById], references: [id])
+  events            TraceEvent[]
+  qrCodes           QrCode[]
+  recallBatches     RecallBatch[]
+
+  @@index([batchCode])
+  @@index([productId])
+  @@index([currentOwnerOrgId])
+}
+
+model TraceEvent {
+  id                 String             @id @default(uuid())
+  eventCode          String             @unique
+  batchId            String
+  productId          String
+  eventType          EventType
+  businessStep       String?
+  disposition        String?
+  sourceOrgId        String
+  destinationOrgId   String?
+  location           String?
+  eventTime          DateTime
+  recordedAt         DateTime           @default(now())
+  payload            Json
+  epcisEvent         Json?
+  evidenceHash       String?
+  signature          String?
+  trustStatus        TrustStatus         @default(PENDING)
+  trustScore         Decimal?
+  verificationVersion String?
+  blockchainStatus   BlockchainStatus    @default(NOT_SUBMITTED)
+  createdById        String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  batch              Batch               @relation(fields: [batchId], references: [id])
+  product            Product             @relation(fields: [productId], references: [id])
+  sourceOrg          Organization        @relation("SourceOrganization", fields: [sourceOrgId], references: [id])
+  destinationOrg     Organization?       @relation("DestinationOrganization", fields: [destinationOrgId], references: [id])
+  createdBy          User?               @relation(fields: [createdById], references: [id])
+  participants       EventParticipant[]
+  trustChecks        TrustCheck[]
+  endorsements       EventEndorsement[]
+  evidence           EventEvidence[]
+  blockchainTx       BlockchainTransaction?
+  dispute            Dispute[]
+
+  @@index([eventCode])
+  @@index([batchId, eventTime])
+  @@index([productId])
+  @@index([eventType])
+  @@index([trustStatus])
+  @@index([blockchainStatus])
+  @@index([sourceOrgId, eventTime])
+  @@index([destinationOrgId, eventTime])
+}
+
+model EventParticipant {
+  id                  String              @id @default(uuid())
+  eventId             String
+  organizationId      String
+  role                ParticipantRole
+  participationStatus ParticipationStatus @default(PENDING)
+  signedAt            DateTime?
+  createdAt           DateTime            @default(now())
+  event               TraceEvent          @relation(fields: [eventId], references: [id])
+  organization         Organization        @relation(fields: [organizationId], references: [id])
+}
+
+model TrustCheck {
+  id              String         @id @default(uuid())
+  eventId          String
+  checkType        TrustCheckType
+  status           CheckStatus
+  score            Decimal
+  reason           String?
+  evidence         Json?
+  executedBy       String
+  executionTimeMs  Int
+  createdAt        DateTime      @default(now())
+  event            TraceEvent    @relation(fields: [eventId], references: [id])
+
+  @@index([eventId])
+}
+
+model EventEndorsement {
+  id                String              @id @default(uuid())
+  eventId            String
+  organizationId     String
+  userId             String?
+  endorsementType    EndorsementType     @default(REQUIRED)
+  decision           EndorsementDecision @default(PENDING)
+  signature          String?
+  comment            String?
+  signedAt           DateTime?
+  createdAt          DateTime            @default(now())
+  event              TraceEvent          @relation(fields: [eventId], references: [id])
+  organization        Organization        @relation(fields: [organizationId], references: [id])
+  user               User?               @relation(fields: [userId], references: [id])
+
+  @@index([eventId])
+}
+
+model Document {
+  id                String          @id @default(uuid())
+  organizationId    String
+  fileName          String
+  mimeType          String
+  fileSize          BigInt
+  storageProvider   String
+  storageKey        String
+  sha256Hash        String
+  encryptionKeyRef  String?
+  uploadedById      String?
+  createdAt         DateTime        @default(now())
+  deletedAt         DateTime?
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  uploadedBy        User?           @relation(fields: [uploadedById], references: [id])
+  eventEvidence     EventEvidence[]
+  certificates      Certificate[]
+
+  @@index([sha256Hash])
+}
+
+model EventEvidence {
+  id                 String                     @id @default(uuid())
+  eventId             String
+  documentId          String
+  evidenceType        EvidenceType
+  verificationStatus  EvidenceVerificationStatus @default(PENDING)
+  verifiedAt          DateTime?
+  verifiedById        String?
+  createdAt           DateTime                   @default(now())
+  event               TraceEvent                 @relation(fields: [eventId], references: [id])
+  document            Document                   @relation(fields: [documentId], references: [id])
+  verifiedBy          User?                      @relation("EvidenceVerifier", fields: [verifiedById], references: [id])
+}
+
+model Certificate {
+  id                  String            @id @default(uuid())
+  organizationId      String
+  certificateNumber   String            @unique
+  certificateType     String
+  issuerName          String
+  subject             String
+  issuedAt            DateTime
+  expiresAt           DateTime?
+  documentId          String?
+  status              CertificateStatus @default(PENDING)
+  verificationData    Json?
+  createdAt           DateTime          @default(now())
+  organization        Organization      @relation(fields: [organizationId], references: [id])
+  document            Document?         @relation(fields: [documentId], references: [id])
+
+  @@index([certificateNumber])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model BlockchainTransaction {
+  id              String           @id @default(uuid())
+  eventId          String           @unique
+  networkName      String
+  channelName      String
+  chaincodeName    String
+  transactionId    String           @unique
+  blockNumber      BigInt?
+  blockHash        String?
+  transactionHash  String?
+  status           BlockchainStatus @default(SUBMITTED)
+  submittedAt      DateTime         @default(now())
+  confirmedAt      DateTime?
+  errorMessage     String?
+  createdAt        DateTime         @default(now())
+  event            TraceEvent       @relation(fields: [eventId], references: [id])
+
+  @@index([transactionId])
+  @@index([eventId])
+}
+
+model Recall {
+  id                 String          @id @default(uuid())
+  recallCode         String          @unique
+  initiatedByOrgId   String
+  reason             String
+  severity           RecallSeverity
+  status             RecallStatus    @default(OPEN)
+  initiatedAt        DateTime        @default(now())
+  closedAt           DateTime?
+  createdAt          DateTime        @default(now())
+  initiatedByOrg     Organization    @relation(fields: [initiatedByOrgId], references: [id])
+  batches            RecallBatch[]
+}
+
+model RecallBatch {
+  recallId          String
+  batchId           String
+  affectedQuantity  Decimal
+  impactStatus      RecallImpactStatus @default(AFFECTED)
+  recall            Recall             @relation(fields: [recallId], references: [id])
+  batch             Batch              @relation(fields: [batchId], references: [id])
+
+  @@id([recallId, batchId])
+}
+
+model Dispute {
+  id             String        @id @default(uuid())
+  disputeCode    String        @unique
+  eventId         String
+  raisedByOrgId   String
+  againstOrgId    String?
+  reason          String
+  status          DisputeStatus @default(OPEN)
+  resolution      String?
+  resolvedById    String?
+  raisedAt        DateTime      @default(now())
+  resolvedAt      DateTime?
+  event           TraceEvent    @relation(fields: [eventId], references: [id])
+  raisedByOrg      Organization  @relation("RaisedBy", fields: [raisedByOrgId], references: [id])
+  againstOrg       Organization? @relation("AgainstOrg", fields: [againstOrgId], references: [id])
+  resolvedBy       User?         @relation("DisputeResolver", fields: [resolvedById], references: [id])
+}
+
+model AuditLog {
+  id              String        @id @default(uuid())
+  organizationId  String
+  userId          String?
+  action          String
+  entityType      String
+  entityId        String
+  oldValue        Json?
+  newValue        Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime      @default(now())
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  user            User?         @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+}
+
+model QrCode {
+  id            String       @id @default(uuid())
+  batchId        String
+  publicCode     String       @unique
+  status         QrCodeStatus @default(ACTIVE)
+  scanCount      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  lastScannedAt  DateTime?
+  batch          Batch        @relation(fields: [batchId], references: [id])
+
+  @@index([publicCode])
+}
+
+model ApiKey {
+  id              String       @id @default(uuid())
+  organizationId  String
+  name            String
+  keyPrefix       String
+  keyHash         String
+  scopes          Json
+  expiresAt       DateTime?
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  organization    Organization @relation(fields: [organizationId], references: [id])
+}

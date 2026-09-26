@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trusttrace
+      POSTGRES_PASSWORD: trusttrace
+      POSTGRES_DB: trusttrace
+    ports:
+      - "5433:5432"
+    volumes:
+      - trusttrace-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trusttrace -d trusttrace"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: trusttrace
+      MINIO_ROOT_PASSWORD: trusttrace123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - trusttrace-minio:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://trusttrace:trusttrace@postgres:5432/trusttrace?schema=public}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://trusttrace:trusttrace@postgres:5432/trusttrace?schema=public}
+      JWT_SECRET: ${JWT_SECRET:-trusttrace-production-secure-jwt-key-2026}
+      API_PORT: 4000
+    depends_on:
+      - postgres
+    command: sh -c "pnpm --filter @trusttrace/database prisma:push && pnpm --filter @trusttrace/api start"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:4000/api"
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      INTERNAL_API_URL: "http://api:4000/api"
+      NEXT_PUBLIC_API_URL: "http://localhost:4000/api"
+    depends_on:
+      - api
+
+volumes:
+  trusttrace-postgres:
+  trusttrace-minio:
