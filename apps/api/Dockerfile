@@ -13,6 +13,7 @@ FROM dependencies AS builder
 RUN pnpm --filter @trusttrace/database prisma:generate
 RUN pnpm --filter @trusttrace/crypto build
 RUN pnpm --filter @trusttrace/types build
+RUN pnpm --filter @trusttrace/epcis build
 RUN pnpm --filter @trusttrace/database build
 RUN pnpm --filter @trusttrace/api build
 

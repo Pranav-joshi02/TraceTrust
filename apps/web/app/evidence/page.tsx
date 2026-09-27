@@ -2,32 +2,77 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockDocuments, DocumentEvidence } from '../../lib/data';
-import { fetchDocuments, createDocument, verifyEvidenceDocument } from '../../lib/api';
+import { mockDocuments, DocumentEvidence, mockTraceEvents, TraceEvent, mockOrganizations, Organization } from '../../lib/data';
+import { fetchDocuments, createDocument, verifyEvidenceDocument, fetchEvents, fetchOrganizations } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { FileCheck2, FileText, CheckCircle2, XCircle, Search, Upload, RefreshCw, Lock, X } from 'lucide-react';
 
 export default function EvidencePage() {
   const [documents, setDocuments] = useState<DocumentEvidence[]>(mockDocuments);
+  const [eventList, setEventList] = useState<TraceEvent[]>(mockTraceEvents);
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
   const [search, setSearch] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DocumentEvidence>(mockDocuments[0]);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<'MATCH' | 'MISMATCH' | null>('MATCH');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Upload modal state
   const [fileName, setFileName] = useState('');
-  const [eventLink, setEventLink] = useState('EVT-82A19-04');
+  const [eventLink, setEventLink] = useState(mockTraceEvents[0].eventCode);
+  const [orgId, setOrgId] = useState(mockOrganizations[0].id);
   const [fileSizeStr, setFileSizeStr] = useState('245 KB');
 
-  useEffect(() => {
-    fetchDocuments().then((data) => {
-      if (data.length > 0) {
-        setDocuments(data);
-        setSelectedDoc(data[0]);
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [docs, events, orgs] = await Promise.all([
+        fetchDocuments(),
+        fetchEvents(),
+        fetchOrganizations()
+      ]);
+      if (docs && docs.length > 0) {
+        setDocuments(docs);
+        setSelectedDoc(docs[0]);
       }
-    });
+      if (events && events.length > 0) {
+        setEventList(events);
+        setEventLink((prev) => (events.some((e) => e.eventCode === prev) ? prev : events[0].eventCode));
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        setOrgId((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[0].id));
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
+
+  const handleOpenModal = async () => {
+    setIsModalOpen(true);
+    try {
+      const [events, orgs] = await Promise.all([fetchEvents(), fetchOrganizations()]);
+      if (events && events.length > 0) {
+        setEventList(events);
+        if (!events.some((e) => e.eventCode === eventLink)) {
+          setEventLink(events[0].eventCode);
+        }
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        if (!orgs.some((o) => o.id === orgId)) {
+          setOrgId(orgs[0].id);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not refresh data for upload modal:', err);
+    }
+  };
 
   const filtered = documents.filter((d) =>
     d.fileName.toLowerCase().includes(search.toLowerCase()) ||
@@ -54,12 +99,13 @@ export default function EvidencePage() {
     e.preventDefault();
     if (!fileName) return;
 
+    const matchedOrg = orgList.find((o) => o.id === orgId) || orgList[0] || mockOrganizations[0];
     const fakeHash = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
     const newDoc: DocumentEvidence = {
       id: `doc-${Date.now()}`,
       fileName,
       eventCode: eventLink,
-      organizationName: 'Highland Organics Estate',
+      organizationName: matchedOrg.name,
       fileSize: fileSizeStr,
       mimeType: 'application/pdf',
       storageProvider: 'minio-s3',
@@ -77,10 +123,13 @@ export default function EvidencePage() {
       id: newDoc.id,
       fileName: newDoc.fileName,
       mimeType: 'application/pdf',
-      fileSize: '240 KB',
+      fileSize: fileSizeStr,
       storageProvider: 'minio-s3',
       sha256Hash: fakeHash,
-      organizationName: newDoc.organizationName
+      organizationName: matchedOrg.name,
+      organizationId: matchedOrg.id,
+      organizationCode: matchedOrg.organizationCode,
+      eventCode: eventLink
     });
   };
 
@@ -89,13 +138,23 @@ export default function EvidencePage() {
       title="Off-Chain Evidence Store"
       description="Cryptographic document vault: files are stored securely off-chain, while SHA-256 digests provide tamper-evident proofs on the ledger."
       action={
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
-        >
-          <Upload className="h-4 w-4" />
-          <span>Upload Document</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            title="Refresh Evidence, Events, and Organizations"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
+          >
+            <Upload className="h-4 w-4" />
+            <span>Upload Document</span>
+          </button>
+        </div>
       }
     >
       <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
@@ -250,14 +309,35 @@ export default function EvidencePage() {
               </div>
 
               <div>
-                <label className="font-mono font-medium text-ink">Linked Event Code</label>
-                <input
-                  type="text"
+                <label className="font-mono font-medium text-ink">Linked Event *</label>
+                <select
                   required
                   value={eventLink}
                   onChange={(e) => setEventLink(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono uppercase outline-none focus:border-ink"
-                />
+                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
+                >
+                  {eventList.map((ev) => (
+                    <option key={ev.id || ev.eventCode} value={ev.eventCode}>
+                      {ev.eventCode} - {ev.eventType} ({ev.batchCode || 'No Batch'} | {ev.sourceOrgName || 'Unknown Org'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-mono font-medium text-ink">Uploading Organization *</label>
+                <select
+                  required
+                  value={orgId}
+                  onChange={(e) => setOrgId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
+                >
+                  {orgList.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} ({o.organizationType} - {o.organizationCode})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -271,7 +351,7 @@ export default function EvidencePage() {
               </div>
 
               <div className="rounded-xl border border-line bg-paper p-3 text-[11px] font-mono text-muted">
-                File payload will be stored in MinIO S3 object storage; SHA-256 fingerprint will be anchored in PostgreSQL.
+                Encrypted document stored in ISO-compliant off-chain repository; cryptographic SHA-256 digest is immutably anchored.
               </div>
 
               <div className="mt-6 flex justify-end gap-2 pt-2">
@@ -286,7 +366,7 @@ export default function EvidencePage() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono font-medium text-paper hover:bg-ink/90"
                 >
-                  Save Evidence in DB
+                  Secure Document Evidence
                 </button>
               </div>
             </form>

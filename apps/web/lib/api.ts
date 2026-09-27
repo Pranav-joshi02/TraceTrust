@@ -61,10 +61,14 @@ export async function fetchProducts(): Promise<Product[]> {
         status: p.status || 'ACTIVE',
         organizationId: p.organizationId || p.organization?.id || 'org-1',
         organizationName: p.organization?.name || 'Highland Organics Estate',
+        organizationCode: p.organization?.organizationCode || 'SUPPLIER-001',
         metadata: p.metadata || {}
       }));
       const local = getLocal<Product[]>('products', []);
-      const localOnly = local.filter((lp) => !mapped.some((mp) => mp.productCode === lp.productCode || mp.id === lp.id));
+      const localOnly = local.filter(
+        (lp) => !['prod-1', 'prod-2', 'prod-3'].includes(lp.id) &&
+                !mapped.some((mp) => mp.productCode === lp.productCode || mp.id === lp.id)
+      );
       const merged = [...mapped, ...localOnly];
       setLocal('products', merged);
       return merged;
@@ -75,7 +79,7 @@ export async function fetchProducts(): Promise<Product[]> {
   return getLocal('products', mockProducts);
 }
 
-export async function createProduct(payload: Partial<Product>): Promise<Product> {
+export async function createProduct(payload: Partial<Product> & { organizationCode?: string }): Promise<Product> {
   const newProduct: Product = {
     id: payload.id || `prod-${Date.now()}`,
     productCode: (payload.productCode || `PROD-${Date.now()}`).toUpperCase(),
@@ -94,11 +98,25 @@ export async function createProduct(payload: Partial<Product>): Promise<Product>
     const res = await fetch(`${BASE_URL}/api/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newProduct)
+      body: JSON.stringify({
+        productCode: newProduct.productCode,
+        sku: newProduct.sku,
+        gtin: newProduct.gtin,
+        name: newProduct.name,
+        description: newProduct.description,
+        category: newProduct.category,
+        unitOfMeasure: newProduct.unitOfMeasure,
+        status: newProduct.status,
+        organizationId: newProduct.organizationId,
+        organizationCode: payload.organizationCode || newProduct.organizationId
+      })
     });
     if (res.ok) {
       const created = await res.json();
       newProduct.id = created.id;
+      if (created.organization?.name) {
+        newProduct.organizationName = created.organization.name;
+      }
     }
   } catch (err) {
     console.warn('Could not persist product to API directly:', err);
@@ -123,6 +141,7 @@ export async function fetchBatches(): Promise<Batch[]> {
         id: b.id,
         batchCode: b.batchCode,
         productId: b.productId,
+        productCode: b.product?.productCode,
         productName: b.product?.name || 'Organic Arabica Coffee Reserve',
         quantity: Number(b.quantity),
         unit: b.unit || 'kg',
@@ -130,6 +149,7 @@ export async function fetchBatches(): Promise<Batch[]> {
         expiryDate: b.expiryDate ? new Date(b.expiryDate).toISOString().split('T')[0] : '2027-09-12',
         currentOwnerOrgId: b.currentOwnerOrgId,
         currentOwnerName: b.currentOwner?.name || 'Highland Organics Estate',
+        currentOwnerCode: b.currentOwner?.organizationCode,
         status: b.status || 'AVAILABLE',
         originLocation: b.originLocation || 'Coorg, Karnataka, India',
         trustScore: 98,
@@ -147,7 +167,7 @@ export async function fetchBatches(): Promise<Batch[]> {
   return getLocal('batches', mockBatches);
 }
 
-export async function createBatch(payload: Partial<Batch> & { productCode?: string }): Promise<Batch> {
+export async function createBatch(payload: Partial<Batch> & { productCode?: string; currentOwnerCode?: string }): Promise<Batch> {
   const newBatch: Batch = {
     id: payload.id || `batch-${Date.now()}`,
     batchCode: (payload.batchCode || `BATCH-${Date.now()}`).toUpperCase(),
@@ -174,6 +194,7 @@ export async function createBatch(payload: Partial<Batch> & { productCode?: stri
         productId: newBatch.productId,
         productCode: payload.productCode,
         currentOwnerOrgId: newBatch.currentOwnerOrgId,
+        ownerCode: payload.currentOwnerCode || newBatch.currentOwnerOrgId,
         quantity: newBatch.quantity,
         unit: newBatch.unit,
         productionDate: newBatch.productionDate,
@@ -185,6 +206,12 @@ export async function createBatch(payload: Partial<Batch> & { productCode?: stri
     if (res.ok) {
       const created = await res.json();
       newBatch.id = created.id;
+      if (created.currentOwner?.name) {
+        newBatch.currentOwnerName = created.currentOwner.name;
+      }
+      if (created.product?.name) {
+        newBatch.productName = created.product.name;
+      }
     }
   } catch (err) {
     console.warn('Could not persist batch to API directly:', err);
@@ -302,8 +329,11 @@ export async function fetchEvents(): Promise<TraceEvent[]> {
           comment: end.comment || ''
         })) || []
       }));
-      setLocal('events', mapped);
-      return mapped;
+      const local = getLocal<TraceEvent[]>('events', []);
+      const localOnly = local.filter((le) => !mapped.some((me) => me.eventCode === le.eventCode || me.id === le.id));
+      const merged = [...mapped, ...localOnly];
+      setLocal('events', merged);
+      return merged;
     }
   } catch (err) {
     console.warn('API error, using cached events:', err);
@@ -311,7 +341,7 @@ export async function fetchEvents(): Promise<TraceEvent[]> {
   return getLocal('events', mockTraceEvents);
 }
 
-export async function createEvent(payload: Partial<TraceEvent>): Promise<TraceEvent> {
+export async function createEvent(payload: Partial<TraceEvent> & { sourceOrgCode?: string; destinationOrgCode?: string }): Promise<TraceEvent> {
   const newEvt: TraceEvent = {
     id: payload.id || `evt-${Date.now()}`,
     eventCode: (payload.eventCode || `EVT-${Date.now()}`).toUpperCase(),
@@ -320,7 +350,7 @@ export async function createEvent(payload: Partial<TraceEvent>): Promise<TraceEv
     productId: payload.productId || 'prod-1',
     productName: payload.productName || 'Organic Arabica Coffee Reserve',
     eventType: payload.eventType || 'TRANSFORMED',
-    businessStep: payload.businessStep || 'processing',
+    businessStep: payload.businessStep || (payload.eventType ? payload.eventType.toLowerCase() : 'processing'),
     disposition: payload.disposition || 'in_progress',
     sourceOrgId: payload.sourceOrgId || 'org-1',
     sourceOrgName: payload.sourceOrgName || 'Highland Organics Estate',
@@ -338,8 +368,14 @@ export async function createEvent(payload: Partial<TraceEvent>): Promise<TraceEv
     blockNumber: 1046,
     payload: payload.payload || { manualEntry: true },
     epcisEvent: payload.epcisEvent || { type: 'ObjectEvent' },
-    checks: payload.checks || [],
-    endorsements: payload.endorsements || []
+    checks: payload.checks || [
+      { id: 'c1', checkType: 'IDENTITY', status: 'PASSED', score: 20, reason: 'Organization identity active', executedBy: 'TrustEngine', executionTimeMs: 10 },
+      { id: 'c2', checkType: 'AUTHORIZATION', status: 'PASSED', score: 15, reason: 'Operator authorized', executedBy: 'TrustEngine', executionTimeMs: 8 },
+      { id: 'c3', checkType: 'SIGNATURE', status: 'PASSED', score: 15, reason: 'Cryptographic signature valid', executedBy: 'TrustEngine', executionTimeMs: 12 }
+    ],
+    endorsements: payload.endorsements || [
+      { orgName: payload.sourceOrgName || 'Highland Organics Estate', decision: 'APPROVED', signature: 'SIG-VERIFIED', signedAt: new Date().toISOString(), comment: 'Recorded via UI' }
+    ]
   };
 
   try {
@@ -349,23 +385,30 @@ export async function createEvent(payload: Partial<TraceEvent>): Promise<TraceEv
       body: JSON.stringify({
         eventCode: newEvt.eventCode,
         batchCode: newEvt.batchCode,
+        batchId: newEvt.batchId,
         eventType: newEvt.eventType,
         businessStep: newEvt.businessStep,
         disposition: newEvt.disposition,
         location: newEvt.location,
-        sourceOrgCode: 'SUPPLIER-001'
+        sourceOrgCode: payload.sourceOrgCode || newEvt.sourceOrgId,
+        sourceOrgId: newEvt.sourceOrgId,
+        destinationOrgCode: payload.destinationOrgCode || newEvt.destinationOrgId,
+        destinationOrgId: newEvt.destinationOrgId
       })
     });
     if (res.ok) {
       const created = await res.json();
       newEvt.id = created.id;
+      if (created.batch?.batchCode) newEvt.batchCode = created.batch.batchCode;
+      if (created.product?.name) newEvt.productName = created.product.name;
+      if (created.sourceOrg?.name) newEvt.sourceOrgName = created.sourceOrg.name;
     }
   } catch (err) {
     console.warn('Could not persist event to API directly:', err);
   }
 
   const existing = getLocal('events', mockTraceEvents);
-  const updated = [newEvt, ...existing.filter((e: TraceEvent) => e.eventCode !== newEvt.eventCode)];
+  const updated = [newEvt, ...existing.filter((e: TraceEvent) => e.eventCode !== newEvt.eventCode && e.id !== newEvt.id)];
   setLocal('events', updated);
   return newEvt;
 }
@@ -393,8 +436,11 @@ export async function fetchOrganizations(): Promise<Organization[]> {
         status: o.status || 'VERIFIED',
         fabricMspId: o.fabricMspId || `${o.name.replace(/\s+/g, '')}MSP`
       }));
-      setLocal('organizations', mapped);
-      return mapped;
+      const local = getLocal<Organization[]>('organizations', []);
+      const localOnly = local.filter((lo) => !mapped.some((mo) => mo.organizationCode === lo.organizationCode || mo.id === lo.id));
+      const merged = [...mapped, ...localOnly];
+      setLocal('organizations', merged);
+      return merged;
     }
   } catch (err) {
     console.warn('API error, using cached organizations:', err);
@@ -433,7 +479,7 @@ export async function createOrganization(payload: Partial<Organization>): Promis
   }
 
   const existing = getLocal('organizations', mockOrganizations);
-  const updated = [newOrg, ...existing.filter((o: Organization) => o.organizationCode !== newOrg.organizationCode)];
+  const updated = [newOrg, ...existing.filter((o: Organization) => o.organizationCode !== newOrg.organizationCode && o.id !== newOrg.id)];
   setLocal('organizations', updated);
   return newOrg;
 }
@@ -460,8 +506,11 @@ export async function fetchRecalls(): Promise<Recall[]> {
         warehousesAffected: 1,
         retailersAffected: 2
       }));
-      setLocal('recalls', mapped);
-      return mapped;
+      const local = getLocal<Recall[]>('recalls', []);
+      const localOnly = local.filter((lr) => !mapped.some((mr) => mr.recallCode === lr.recallCode || mr.id === lr.id));
+      const merged = [...mapped, ...localOnly];
+      setLocal('recalls', merged);
+      return merged;
     }
   } catch (err) {
     console.warn('API error, using cached recalls:', err);
@@ -469,7 +518,7 @@ export async function fetchRecalls(): Promise<Recall[]> {
   return getLocal('recalls', mockRecalls);
 }
 
-export async function createRecall(payload: Partial<Recall>): Promise<Recall> {
+export async function createRecall(payload: Partial<Recall> & { initiatedByOrgId?: string; initiatedByOrgCode?: string }): Promise<Recall> {
   const newRecall: Recall = {
     id: payload.id || `rec-${Date.now()}`,
     recallCode: (payload.recallCode || `REC-${Date.now().toString().slice(-4)}`).toUpperCase(),
@@ -494,19 +543,22 @@ export async function createRecall(payload: Partial<Recall>): Promise<Recall> {
         severity: newRecall.severity,
         status: newRecall.status,
         batchCode: newRecall.affectedBatches[0],
-        affectedQuantity: newRecall.affectedUnits
+        affectedQuantity: newRecall.affectedUnits,
+        initiatedByOrgId: payload.initiatedByOrgId,
+        organizationCode: payload.initiatedByOrgCode || 'SUPPLIER-001'
       })
     });
     if (res.ok) {
       const created = await res.json();
       newRecall.id = created.id;
+      if (created.initiatedByOrg?.name) newRecall.initiatedBy = created.initiatedByOrg.name;
     }
   } catch (err) {
     console.warn('Could not persist recall to API directly:', err);
   }
 
   const existing = getLocal('recalls', mockRecalls);
-  const updated = [newRecall, ...existing.filter((r: Recall) => r.recallCode !== newRecall.recallCode)];
+  const updated = [newRecall, ...existing.filter((r: Recall) => r.recallCode !== newRecall.recallCode && r.id !== newRecall.id)];
   setLocal('recalls', updated);
   return newRecall;
 }
@@ -533,8 +585,11 @@ export async function fetchDisputes(): Promise<Dispute[]> {
         evidenceCount: 2,
         resolution: d.resolution
       }));
-      setLocal('disputes', mapped);
-      return mapped;
+      const local = getLocal<Dispute[]>('disputes', []);
+      const localOnly = local.filter((ld) => !mapped.some((md) => md.disputeCode === ld.disputeCode || md.id === ld.id));
+      const merged = [...mapped, ...localOnly];
+      setLocal('disputes', merged);
+      return merged;
     }
   } catch (err) {
     console.warn('API error, using cached disputes:', err);
@@ -542,7 +597,7 @@ export async function fetchDisputes(): Promise<Dispute[]> {
   return getLocal('disputes', mockDisputes);
 }
 
-export async function createDispute(payload: Partial<Dispute>): Promise<Dispute> {
+export async function createDispute(payload: Partial<Dispute> & { eventId?: string; raisedByOrgId?: string; againstOrgId?: string }): Promise<Dispute> {
   const newDispute: Dispute = {
     id: payload.id || `dsp-${Date.now()}`,
     disputeCode: (payload.disputeCode || `DSP-${Date.now().toString().slice(-4)}`).toUpperCase(),
@@ -564,20 +619,28 @@ export async function createDispute(payload: Partial<Dispute>): Promise<Dispute>
       body: JSON.stringify({
         disputeCode: newDispute.disputeCode,
         eventCode: newDispute.eventCode,
+        eventId: payload.eventId,
         reason: newDispute.reason,
-        status: newDispute.status
+        status: newDispute.status,
+        raisedBy: newDispute.raisedBy,
+        raisedByOrgId: payload.raisedByOrgId,
+        againstOrg: newDispute.againstOrg,
+        againstOrgId: payload.againstOrgId
       })
     });
     if (res.ok) {
       const created = await res.json();
       newDispute.id = created.id;
+      if (created.raisedByOrg?.name) newDispute.raisedBy = created.raisedByOrg.name;
+      if (created.againstOrg?.name) newDispute.againstOrg = created.againstOrg.name;
+      if (created.event?.batch?.batchCode) newDispute.batchCode = created.event.batch.batchCode;
     }
   } catch (err) {
     console.warn('Could not persist dispute to API directly:', err);
   }
 
   const existing = getLocal('disputes', mockDisputes);
-  const updated = [newDispute, ...existing.filter((d: Dispute) => d.disputeCode !== newDispute.disputeCode)];
+  const updated = [newDispute, ...existing.filter((d: Dispute) => d.disputeCode !== newDispute.disputeCode && d.id !== newDispute.id)];
   setLocal('disputes', updated);
   return newDispute;
 }
@@ -604,8 +667,11 @@ export async function fetchCertificates(): Promise<Certificate[]> {
         verificationMethod: 'Consortium X.509 Cryptographic Verification',
         standards: 'ISO/IEC 17065'
       }));
-      setLocal('certificates', mapped);
-      return mapped;
+      const local = getLocal<Certificate[]>('certificates', []);
+      const localOnly = local.filter((lc) => !mapped.some((mc) => mc.certificateNumber === lc.certificateNumber || mc.id === lc.id));
+      const merged = [...mapped, ...localOnly];
+      setLocal('certificates', merged);
+      return merged;
     }
   } catch (err) {
     console.warn('API error, using cached certificates:', err);
@@ -613,7 +679,7 @@ export async function fetchCertificates(): Promise<Certificate[]> {
   return getLocal('certificates', mockCertificates);
 }
 
-export async function createCertificate(payload: Partial<Certificate>): Promise<Certificate> {
+export async function createCertificate(payload: Partial<Certificate> & { organizationId?: string; organizationCode?: string }): Promise<Certificate> {
   const newCert: Certificate = {
     id: payload.id || `cert-${Date.now()}`,
     certificateNumber: (payload.certificateNumber || `CERT-${Date.now().toString().slice(-4)}`).toUpperCase(),
@@ -632,18 +698,29 @@ export async function createCertificate(payload: Partial<Certificate>): Promise<
     const res = await fetch(`${BASE_URL}/api/certificates`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newCert)
+      body: JSON.stringify({
+        certificateNumber: newCert.certificateNumber,
+        certificateType: newCert.certificateType,
+        issuerName: newCert.issuerName,
+        subject: newCert.subject,
+        organizationId: payload.organizationId,
+        organizationCode: payload.organizationCode || 'SUPPLIER-001',
+        issuedAt: newCert.issuedAt,
+        expiresAt: newCert.expiresAt,
+        status: newCert.status
+      })
     });
     if (res.ok) {
       const created = await res.json();
       newCert.id = created.id;
+      if (created.organization?.name) newCert.organizationName = created.organization.name;
     }
   } catch (err) {
     console.warn('Could not persist certificate to API directly:', err);
   }
 
   const existing = getLocal('certificates', mockCertificates);
-  const updated = [newCert, ...existing.filter((c: Certificate) => c.certificateNumber !== newCert.certificateNumber)];
+  const updated = [newCert, ...existing.filter((c: Certificate) => c.certificateNumber !== newCert.certificateNumber && c.id !== newCert.id)];
   setLocal('certificates', updated);
   return newCert;
 }
@@ -669,8 +746,11 @@ export async function fetchDocuments(): Promise<DocumentEvidence[]> {
         eventCode: 'EVT-82A19-04',
         storageProvider: d.storageProvider || 'minio-s3'
       }));
-      setLocal('documents', mapped);
-      return mapped;
+      const local = getLocal<DocumentEvidence[]>('documents', []);
+      const localOnly = local.filter((ld) => !mapped.some((md) => md.id === ld.id || md.sha256Hash === ld.sha256Hash));
+      const merged = [...mapped, ...localOnly];
+      setLocal('documents', merged);
+      return merged;
     }
   } catch (err) {
     console.warn('API error, using cached documents:', err);
@@ -678,7 +758,7 @@ export async function fetchDocuments(): Promise<DocumentEvidence[]> {
   return getLocal('documents', mockDocuments);
 }
 
-export async function createDocument(payload: Partial<DocumentEvidence>): Promise<DocumentEvidence> {
+export async function createDocument(payload: Partial<DocumentEvidence> & { organizationId?: string; organizationCode?: string }): Promise<DocumentEvidence> {
   const newDoc: DocumentEvidence = {
     id: payload.id || `doc-${Date.now()}`,
     fileName: payload.fileName || 'uploaded-evidence.pdf',
@@ -701,19 +781,23 @@ export async function createDocument(payload: Partial<DocumentEvidence>): Promis
         fileSize: 245760,
         mimeType: newDoc.mimeType,
         sha256Hash: newDoc.sha256Hash,
-        storageProvider: newDoc.storageProvider
+        storageProvider: newDoc.storageProvider,
+        eventCode: newDoc.eventCode,
+        organizationId: payload.organizationId,
+        organizationCode: payload.organizationCode || 'SUPPLIER-001'
       })
     });
     if (res.ok) {
       const created = await res.json();
       newDoc.id = created.id;
+      if (created.organization?.name) newDoc.organizationName = created.organization.name;
     }
   } catch (err) {
     console.warn('Could not persist document to API directly:', err);
   }
 
   const existing = getLocal('documents', mockDocuments);
-  const updated = [newDoc, ...existing];
+  const updated = [newDoc, ...existing.filter((d: DocumentEvidence) => d.id !== newDoc.id)];
   setLocal('documents', updated);
   return newDoc;
 }

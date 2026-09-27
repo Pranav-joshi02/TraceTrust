@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockProducts, Product } from '../../lib/data';
-import { fetchProducts, createProduct } from '../../lib/api';
+import { mockProducts, mockOrganizations, Product, Organization } from '../../lib/data';
+import { fetchProducts, createProduct, fetchOrganizations } from '../../lib/api';
 import { Plus, Search, Filter, Package, ArrowRight, Check, RefreshCw, Layers } from 'lucide-react';
 import { StatusPill } from '../../components/ui/StatusPill';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
+  const [selectedOrg, setSelectedOrg] = useState(mockOrganizations[0].id);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -19,9 +21,13 @@ export default function ProductsPage() {
   const loadProducts = async () => {
     setIsRefreshing(true);
     try {
-      const data = await fetchProducts();
+      const [data, orgs] = await Promise.all([fetchProducts(), fetchOrganizations()]);
       if (data && data.length > 0) {
         setProducts(data);
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        setSelectedOrg((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[0].id));
       }
     } finally {
       setIsRefreshing(false);
@@ -31,6 +37,18 @@ export default function ProductsPage() {
   useEffect(() => {
     loadProducts();
   }, []);
+
+  const handleOpenModal = async () => {
+    setIsModalOpen(true);
+    try {
+      const orgs = await fetchOrganizations();
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+      }
+    } catch (err) {
+      console.warn('Could not refresh organizations for product modal:', err);
+    }
+  };
 
   // New product form state
   const [newCode, setNewCode] = useState('');
@@ -50,6 +68,8 @@ export default function ProductsPage() {
     e.preventDefault();
     if (!newCode || !newName) return;
 
+    const org = orgList.find((o) => o.id === selectedOrg) || orgList[0] || mockOrganizations[0];
+
     const created: Product = {
       id: `prod-${Date.now()}`,
       productCode: newCode.toUpperCase(),
@@ -60,8 +80,8 @@ export default function ProductsPage() {
       category: newCategory,
       unitOfMeasure: newUom,
       status: 'ACTIVE',
-      organizationId: 'SUPPLIER-001',
-      organizationName: 'Highland Organics Estate'
+      organizationId: org.id,
+      organizationName: org.name
     };
 
     setIsModalOpen(false);
@@ -70,7 +90,10 @@ export default function ProductsPage() {
     setNewSku('');
     setNewGtin('');
 
-    const persisted = await createProduct(created);
+    const persisted = await createProduct({
+      ...created,
+      organizationCode: org.organizationCode
+    });
     setProducts((prev) => [persisted, ...prev.filter((p) => p.productCode !== persisted.productCode && p.id !== persisted.id)]);
     setRecentlyCreated(persisted);
   };
@@ -87,10 +110,10 @@ export default function ProductsPage() {
             className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sync</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenModal}
             className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
           >
             <Plus className="h-4 w-4" />
@@ -276,6 +299,31 @@ export default function ProductsPage() {
                 />
               </div>
 
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="font-mono text-[11px] uppercase text-muted">
+                    Producing / Owning Organization * ({orgList.length} available)
+                  </label>
+                  <Link
+                    href="/organizations"
+                    className="font-mono text-[11px] text-ink hover:underline flex items-center gap-1"
+                  >
+                    <span>+ Add Org</span>
+                  </Link>
+                </div>
+                <select
+                  value={selectedOrg}
+                  onChange={(e) => setSelectedOrg(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-medium outline-none focus:border-ink"
+                >
+                  {orgList.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} ({o.organizationCode} • {o.organizationType})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="font-mono text-[11px] uppercase text-muted">Category</label>
@@ -326,7 +374,7 @@ export default function ProductsPage() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono text-xs font-semibold text-paper hover:bg-ink/80"
                 >
-                  Register in Supabase
+                  Register Product Specification
                 </button>
               </div>
             </form>

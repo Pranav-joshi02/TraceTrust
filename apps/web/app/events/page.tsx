@@ -3,34 +3,84 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockTraceEvents, TraceEvent, Batch } from '../../lib/data';
-import { fetchEvents, createEvent, fetchBatches } from '../../lib/api';
+import { mockTraceEvents, mockBatches, mockOrganizations, TraceEvent, Batch, Organization } from '../../lib/data';
+import { fetchEvents, createEvent, fetchBatches, fetchOrganizations } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { Search, Plus, Filter, Activity, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Search, Plus, Filter, Activity, ArrowRight, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<TraceEvent[]>(mockTraceEvents);
-  const [batchList, setBatchList] = useState<Batch[]>([]);
+  const [batchList, setBatchList] = useState<Batch[]>(mockBatches);
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    fetchEvents().then((data) => setEvents(data));
-    fetchBatches().then((data) => {
-      if (data.length > 0) {
-        setBatchList(data);
-        setSelectedBatch(data[0].batchCode);
-      }
-    });
-  }, []);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // New event form state
   const [newEventCode, setNewEventCode] = useState('');
-  const [selectedBatch, setSelectedBatch] = useState('BATCH-2026-001');
-  const [eventType, setEventType] = useState<'CREATED' | 'MANUFACTURED' | 'PACKED' | 'SHIPPED' | 'RECEIVED'>('SHIPPED');
+  const [selectedBatchCode, setSelectedBatchCode] = useState(mockBatches[0].batchCode);
+  const [sourceOrgId, setSourceOrgId] = useState(mockOrganizations[0].id);
+  const [destinationOrgId, setDestinationOrgId] = useState('');
+  const [eventType, setEventType] = useState<'CREATED' | 'MANUFACTURED' | 'PACKED' | 'SHIPPED' | 'RECEIVED' | 'QUALITY_CHECKED'>('SHIPPED');
   const [location, setLocation] = useState('Central Warehouse Hub Bay 4');
+
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [evts, batches, orgs] = await Promise.all([
+        fetchEvents(),
+        fetchBatches(),
+        fetchOrganizations()
+      ]);
+      if (evts && evts.length > 0) setEvents(evts);
+      if (batches && batches.length > 0) {
+        setBatchList(batches);
+        setSelectedBatchCode((prev) => (batches.some((b) => b.batchCode === prev) ? prev : batches[0].batchCode));
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        setSourceOrgId((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[0].id));
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleOpenModal = async () => {
+    setIsModalOpen(true);
+    try {
+      const [batches, orgs] = await Promise.all([fetchBatches(), fetchOrganizations()]);
+      if (batches && batches.length > 0) {
+        setBatchList(batches);
+        if (!batches.some((b) => b.batchCode === selectedBatchCode)) {
+          setSelectedBatchCode(batches[0].batchCode);
+          if (batches[0].originLocation) setLocation(batches[0].originLocation);
+        }
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+      }
+    } catch (err) {
+      console.warn('Could not refresh data for event modal:', err);
+    }
+  };
+
+  const handleBatchChange = (batchCode: string) => {
+    setSelectedBatchCode(batchCode);
+    const foundBatch = batchList.find((b) => b.batchCode === batchCode);
+    if (foundBatch) {
+      if (foundBatch.originLocation) setLocation(foundBatch.originLocation);
+      if (foundBatch.currentOwnerOrgId && orgList.some((o) => o.id === foundBatch.currentOwnerOrgId)) {
+        setSourceOrgId(foundBatch.currentOwnerOrgId);
+      }
+    }
+  };
 
   const filtered = events.filter((e) => {
     const matchesSearch =
@@ -46,36 +96,42 @@ export default function EventsPage() {
     e.preventDefault();
     if (!newEventCode) return;
 
+    const targetBatch = batchList.find((b) => b.batchCode === selectedBatchCode) || batchList[0] || mockBatches[0];
+    const sourceOrg = orgList.find((o) => o.id === sourceOrgId) || orgList[0] || mockOrganizations[0];
+    const destOrg = destinationOrgId ? orgList.find((o) => o.id === destinationOrgId) : undefined;
+
     const created: TraceEvent = {
       id: `evt-${Date.now()}`,
       eventCode: newEventCode.toUpperCase(),
-      batchId: 'batch-1',
-      batchCode: selectedBatch,
-      productId: 'prod-1',
-      productName: 'Organic Arabica Coffee Reserve',
+      batchId: targetBatch.id,
+      batchCode: targetBatch.batchCode,
+      productId: targetBatch.productId,
+      productName: targetBatch.productName,
       eventType,
       businessStep: eventType.toLowerCase(),
-      disposition: 'active',
-      sourceOrgId: 'org-1',
-      sourceOrgName: 'Highland Organics Estate',
-      location,
+      disposition: eventType === 'SHIPPED' ? 'in_transit' : eventType === 'RECEIVED' ? 'available' : 'active',
+      sourceOrgId: sourceOrg.id,
+      sourceOrgName: sourceOrg.name,
+      destinationOrgId: destOrg?.id,
+      destinationOrgName: destOrg?.name,
+      location: location || targetBatch.originLocation,
       eventTime: new Date().toISOString(),
       recordedAt: new Date().toISOString(),
       evidenceHash: 'c4ca4238a0b923820dcc509a6f75849b29c914bf4b5042617f694e477f6b9bb7',
-      signature: 'SIG-ED25519-NEW-USER-SUBMISSION',
+      signature: 'SIG-ED25519-USER-SUBMISSION',
       trustStatus: 'VERIFIED',
       trustScore: 97,
       blockchainStatus: 'CONFIRMED',
       blockchainTxId: `TX-FABRIC-${Date.now()}`,
       blockNumber: 1046,
-      payload: { location, manualLog: true },
+      payload: { location, manualLog: true, productId: targetBatch.productId, productName: targetBatch.productName },
       epcisEvent: { type: 'ObjectEvent', action: 'OBSERVE' },
       endorsements: [
-        { orgName: 'Highland Organics Estate', decision: 'APPROVED', signature: 'SIG-DISP', signedAt: new Date().toISOString(), comment: 'Logged via console' }
+        { orgName: sourceOrg.name, decision: 'APPROVED', signature: 'SIG-DISP', signedAt: new Date().toISOString(), comment: 'Logged via console' }
       ],
       checks: [
-        { id: 'nc1', checkType: 'IDENTITY', status: 'PASSED', score: 20, reason: 'Organization identity active', executedBy: 'TrustEngine', executionTimeMs: 12 },
-        { id: 'nc2', checkType: 'AUTHORIZATION', status: 'PASSED', score: 15, reason: 'Operator authorized', executedBy: 'TrustEngine', executionTimeMs: 9 },
+        { id: 'nc1', checkType: 'IDENTITY', status: 'PASSED', score: 20, reason: `${sourceOrg.name} identity active and verified`, executedBy: 'TrustEngine', executionTimeMs: 12 },
+        { id: 'nc2', checkType: 'AUTHORIZATION', status: 'PASSED', score: 15, reason: 'Operator authorized for custody transfer', executedBy: 'TrustEngine', executionTimeMs: 9 },
         { id: 'nc3', checkType: 'SIGNATURE', status: 'PASSED', score: 15, reason: 'Valid ED25519 digital signature', executedBy: 'TrustEngine', executionTimeMs: 14 }
       ]
     };
@@ -84,7 +140,11 @@ export default function EventsPage() {
     setIsModalOpen(false);
     setNewEventCode('');
 
-    await createEvent(created);
+    await createEvent({
+      ...created,
+      sourceOrgCode: sourceOrg.organizationCode,
+      destinationOrgCode: destOrg?.organizationCode
+    });
   };
 
   return (
@@ -92,13 +152,23 @@ export default function EventsPage() {
       title="Supply Chain Trace Events"
       description="Real-time distributed event stream across suppliers, carriers, auditors, and warehouses."
       action={
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Log Trace Event</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            title="Refresh Events, Batches, and Orgs"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Log Trace Event</span>
+          </button>
+        </div>
       }
     >
       {/* Filters */}
@@ -246,13 +316,60 @@ export default function EventsPage() {
               </div>
 
               <div>
-                <label className="font-mono text-[11px] uppercase text-muted">Target Batch *</label>
-                <input
-                  type="text"
-                  value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
+                <div className="flex items-center justify-between">
+                  <label className="font-mono text-[11px] uppercase text-muted">
+                    Target Batch * ({batchList.length} available)
+                  </label>
+                  <Link
+                    href="/batches"
+                    className="font-mono text-[11px] text-ink hover:underline flex items-center gap-1"
+                  >
+                    <span>+ Batches</span>
+                  </Link>
+                </div>
+                <select
+                  value={selectedBatchCode}
+                  onChange={(e) => handleBatchChange(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-mono outline-none focus:border-ink"
-                />
+                >
+                  {batchList.map((b) => (
+                    <option key={b.id} value={b.batchCode}>
+                      {b.batchCode} — {b.productName} ({b.quantity} {b.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-mono text-[11px] uppercase text-muted">Source / Actor Organization *</label>
+                  <select
+                    value={sourceOrgId}
+                    onChange={(e) => setSourceOrgId(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-mono outline-none focus:border-ink"
+                  >
+                    {orgList.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.organizationCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-mono text-[11px] uppercase text-muted">Destination Org (Optional)</label>
+                  <select
+                    value={destinationOrgId}
+                    onChange={(e) => setDestinationOrgId(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-mono outline-none focus:border-ink"
+                  >
+                    <option value="">None / Internal Transition</option>
+                    {orgList.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.organizationCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -261,6 +378,7 @@ export default function EventsPage() {
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
+                  placeholder="Facility, warehouse bay, or GPS point"
                   className="mt-1 w-full rounded-lg border border-line bg-paper p-2 outline-none focus:border-ink"
                 />
               </div>
@@ -277,7 +395,7 @@ export default function EventsPage() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono text-xs font-semibold text-paper hover:bg-ink/80"
                 >
-                  Submit for Trust Validation
+                  Publish Verified Event
                 </button>
               </div>
             </form>

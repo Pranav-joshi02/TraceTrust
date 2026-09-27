@@ -130,17 +130,46 @@ export default function TracePage() {
 
         {/* Search & Mode Bar */}
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-white p-4 shadow-sm">
-          <form onSubmit={handleSearch} className="flex flex-1 items-center gap-3">
-            <div className="relative flex-1 max-w-md">
+          <form onSubmit={handleSearch} className="flex flex-1 flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
               <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <input
                 type="text"
+                list="batch-suggestions"
                 value={batchInput}
                 onChange={(e) => setBatchInput(e.target.value)}
                 placeholder="Enter Batch ID (e.g. BATCH-2026-001)..."
                 className="w-full rounded-full border border-line bg-paper py-2 pl-10 pr-4 font-mono text-xs text-ink outline-none transition focus:border-ink"
               />
+              <datalist id="batch-suggestions">
+                {availableBatches.map((b) => (
+                  <option key={b.id || b.batchCode} value={b.batchCode}>
+                    {b.productName}
+                  </option>
+                ))}
+              </datalist>
             </div>
+
+            {availableBatches.length > 0 && (
+              <select
+                value={availableBatches.some((b) => b.batchCode === activeBatch) ? activeBatch : ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setBatchInput(e.target.value);
+                    setActiveBatch(e.target.value);
+                  }
+                }}
+                className="rounded-full border border-line bg-paper px-3 py-2 font-mono text-xs text-ink outline-none focus:border-ink"
+              >
+                <option value="" disabled>Select Stored Batch...</option>
+                {availableBatches.map((b) => (
+                  <option key={b.id || b.batchCode} value={b.batchCode}>
+                    {b.batchCode} - {b.productName}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <button
               type="submit"
               className="rounded-full bg-ink px-5 py-2 font-mono text-xs font-medium text-paper transition hover:bg-ink/80"

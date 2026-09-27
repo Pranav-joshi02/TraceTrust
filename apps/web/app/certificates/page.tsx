@@ -2,25 +2,57 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockCertificates, Certificate } from '../../lib/data';
-import { fetchCertificates, createCertificate } from '../../lib/api';
+import { mockCertificates, Certificate, mockOrganizations, Organization } from '../../lib/data';
+import { fetchCertificates, createCertificate, fetchOrganizations } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { Award, ShieldCheck, Search, Plus, CheckCircle2, AlertTriangle, XCircle, X } from 'lucide-react';
+import { Award, ShieldCheck, Search, Plus, CheckCircle2, AlertTriangle, XCircle, X, RefreshCw } from 'lucide-react';
 
 export default function CertificatesPage() {
   const [certs, setCerts] = useState<Certificate[]>(mockCertificates);
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // New certificate state
   const [certNumber, setCertNumber] = useState('');
   const [certType, setCertType] = useState('USDA Organic / India NPOP');
   const [issuerName, setIssuerName] = useState('SGS Quality Assurance Global');
   const [subject, setSubject] = useState('Organic Plantation Standards');
+  const [organizationId, setOrganizationId] = useState(mockOrganizations[0].id);
+
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [data, orgs] = await Promise.all([fetchCertificates(), fetchOrganizations()]);
+      if (data && data.length > 0) setCerts(data);
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        setOrganizationId((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[0].id));
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    fetchCertificates().then((data) => setCerts(data));
+    loadData();
   }, []);
+
+  const handleOpenModal = async () => {
+    setIsModalOpen(true);
+    try {
+      const orgs = await fetchOrganizations();
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        if (!orgs.some((o) => o.id === organizationId)) {
+          setOrganizationId(orgs[0].id);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not refresh organizations for certificate modal:', err);
+    }
+  };
 
   const filtered = certs.filter((c) =>
     c.certificateNumber.toLowerCase().includes(search.toLowerCase()) ||
@@ -39,6 +71,8 @@ export default function CertificatesPage() {
     e.preventDefault();
     if (!certNumber) return;
 
+    const matchedOrg = orgList.find((o) => o.id === organizationId) || orgList[0] || mockOrganizations[0];
+
     const newCert: Certificate = {
       id: `cert-${Date.now()}`,
       certificateNumber: certNumber.toUpperCase(),
@@ -48,7 +82,7 @@ export default function CertificatesPage() {
       issuedAt: new Date().toISOString().split('T')[0],
       expiresAt: '2027-09-25',
       status: 'VALID',
-      organizationName: 'Highland Organics Estate',
+      organizationName: matchedOrg.name,
       verificationMethod: 'Consortium X.509 Cryptographic Verification',
       standards: 'ISO/IEC 17065'
     };
@@ -57,7 +91,11 @@ export default function CertificatesPage() {
     setIsModalOpen(false);
     setCertNumber('');
 
-    await createCertificate(newCert);
+    await createCertificate({
+      ...newCert,
+      organizationId: matchedOrg.id,
+      organizationCode: matchedOrg.organizationCode
+    });
   };
 
   return (
@@ -65,13 +103,23 @@ export default function CertificatesPage() {
       title="Digital Certificates & Accreditations"
       description="Cryptographic trust anchors: ISO standards, organic certifications, and fair-trade compliance records."
       action={
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Issue Certificate</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            title="Refresh Certificates and Organizations"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Issue Certificate</span>
+          </button>
+        </div>
       }
     >
       <div className="rounded-2xl border border-line bg-white shadow-sm overflow-hidden">
@@ -176,6 +224,22 @@ export default function CertificatesPage() {
               </div>
 
               <div>
+                <label className="font-mono font-medium text-ink">Organization Subject *</label>
+                <select
+                  required
+                  value={organizationId}
+                  onChange={(e) => setOrganizationId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
+                >
+                  {orgList.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} ({o.organizationType} - {o.organizationCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="font-mono font-medium text-ink">Auditing Authority / Issuer</label>
                 <input
                   type="text"
@@ -208,7 +272,7 @@ export default function CertificatesPage() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono font-medium text-paper hover:bg-ink/90"
                 >
-                  Store Certificate in DB
+                  Issue & Anchor Certificate
                 </button>
               </div>
             </form>

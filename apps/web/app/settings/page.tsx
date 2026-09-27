@@ -34,12 +34,12 @@ export default function SettingsPage() {
   return (
     <AppShell
       title="Platform Settings & Configuration"
-      description="Manage database connectors, API tokens, cryptographic identity pairs, and consortium profile."
+      description="Manage enterprise data connectors, API access tokens, cryptographic identities, and consortium organization profile."
     >
       {/* Tabs */}
       <div className="flex border-b border-line text-xs font-mono">
         {[
-          { id: 'database', label: 'Database & Supabase', icon: Database },
+          { id: 'database', label: 'Data Connectors', icon: Database },
           { id: 'apikeys', label: 'API Keys & Scopes', icon: KeyRound },
           { id: 'identity', label: 'Fabric X.509 Identity', icon: Shield },
           { id: 'org', label: 'Organization Profile', icon: Building2 }
@@ -66,9 +66,9 @@ export default function SettingsPage() {
         {activeTab === 'database' && (
           <div className="rounded-2xl border border-line bg-white p-6 shadow-sm space-y-6 text-xs">
             <div>
-              <h3 className="text-base font-bold text-ink">Supabase PostgreSQL Connection</h3>
+              <h3 className="text-base font-bold text-ink">Enterprise Persistence & Connection Pooling</h3>
               <p className="mt-1 text-muted">
-                TrustTrace connects via Prisma ORM using Supabase transaction pooling and direct session migration URLs.
+                TrustTrace synchronizes transactions using high-throughput connection pooling with failover session connectors.
               </p>
             </div>
 

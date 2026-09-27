@@ -1,33 +1,89 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockRecalls, Recall, Batch } from '../../lib/data';
-import { fetchRecalls, createRecall, fetchBatches, fetchRecallImpact } from '../../lib/api';
+import { mockRecalls, mockBatches, mockOrganizations, Recall, Batch, Organization } from '../../lib/data';
+import { fetchRecalls, createRecall, fetchBatches, fetchOrganizations, fetchRecallImpact } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { AlertTriangle, ShieldAlert, GitFork, ArrowDown, Building2, Store, Box, Plus } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, GitFork, ArrowDown, Building2, Store, Box, Plus, RefreshCw } from 'lucide-react';
 
 export default function RecallsPage() {
   const [recalls, setRecalls] = useState<Recall[]>(mockRecalls);
   const [selectedRecall, setSelectedRecall] = useState<Recall>(mockRecalls[0]);
   const [impactData, setImpactData] = useState<any>(null);
-  const [batchList, setBatchList] = useState<Batch[]>([]);
+  const [batchList, setBatchList] = useState<Batch[]>(mockBatches);
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // New recall form state
+  const [targetBatchCode, setTargetBatchCode] = useState(mockBatches[0].batchCode);
+  const [initiatedByOrgId, setInitiatedByOrgId] = useState(mockOrganizations[0].id);
+  const [affectedUnits, setAffectedUnits] = useState(String(mockBatches[0].quantity));
+  const [reason, setReason] = useState('');
+  const [severity, setSeverity] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('HIGH');
+
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [recs, batches, orgs] = await Promise.all([
+        fetchRecalls(),
+        fetchBatches(),
+        fetchOrganizations()
+      ]);
+      if (recs && recs.length > 0) {
+        setRecalls(recs);
+        setSelectedRecall(recs[0]);
+      }
+      if (batches && batches.length > 0) {
+        setBatchList(batches);
+        setTargetBatchCode((prev) => (batches.some((b) => b.batchCode === prev) ? prev : batches[0].batchCode));
+        const matched = batches.find((b) => b.batchCode === targetBatchCode) || batches[0];
+        setAffectedUnits(String(matched.quantity));
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        setInitiatedByOrgId((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[0].id));
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    fetchRecalls().then((data) => {
-      if (data.length > 0) {
-        setRecalls(data);
-        setSelectedRecall(data[0]);
-      }
-    });
-    fetchBatches().then((data) => {
-      if (data.length > 0) {
-        setBatchList(data);
-        setTargetBatch(data[0].batchCode);
-      }
-    });
+    loadData();
   }, []);
+
+  const handleOpenModal = async () => {
+    setIsModalOpen(true);
+    try {
+      const [batches, orgs] = await Promise.all([fetchBatches(), fetchOrganizations()]);
+      if (batches && batches.length > 0) {
+        setBatchList(batches);
+        if (!batches.some((b) => b.batchCode === targetBatchCode)) {
+          setTargetBatchCode(batches[0].batchCode);
+          setAffectedUnits(String(batches[0].quantity));
+        }
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+      }
+    } catch (err) {
+      console.warn('Could not refresh data for recall modal:', err);
+    }
+  };
+
+  const handleBatchChange = (batchCode: string) => {
+    setTargetBatchCode(batchCode);
+    const matched = batchList.find((b) => b.batchCode === batchCode);
+    if (matched) {
+      setAffectedUnits(String(matched.quantity));
+      if (matched.currentOwnerOrgId && orgList.some((o) => o.id === matched.currentOwnerOrgId)) {
+        setInitiatedByOrgId(matched.currentOwnerOrgId);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!selectedRecall?.id) return;
@@ -36,25 +92,23 @@ export default function RecallsPage() {
     });
   }, [selectedRecall?.id]);
 
-  // New recall form state
-  const [targetBatch, setTargetBatch] = useState('BATCH-2026-001');
-  const [reason, setReason] = useState('');
-  const [severity, setSeverity] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('HIGH');
-
   const handleCreateRecall = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason) return;
 
+    const matchedBatch = batchList.find((b) => b.batchCode === targetBatchCode) || batchList[0] || mockBatches[0];
+    const org = orgList.find((o) => o.id === initiatedByOrgId) || orgList[0] || mockOrganizations[0];
+
     const newRec: Recall = {
       id: `rec-${Date.now()}`,
       recallCode: `REC-2026-0${recalls.length + 20}`,
-      initiatedBy: 'Highland Organics Estate',
+      initiatedBy: org.name,
       reason,
       severity,
       status: 'OPEN',
       initiatedAt: new Date().toISOString(),
-      affectedBatches: [targetBatch],
-      affectedUnits: 1250,
+      affectedBatches: [matchedBatch.batchCode],
+      affectedUnits: Number(affectedUnits) || matchedBatch.quantity,
       warehousesAffected: 2,
       retailersAffected: 5
     };
@@ -64,7 +118,11 @@ export default function RecallsPage() {
     setIsModalOpen(false);
     setReason('');
 
-    await createRecall(newRec);
+    await createRecall({
+      ...newRec,
+      initiatedByOrgId: org.id,
+      initiatedByOrgCode: org.organizationCode
+    });
   };
 
   return (
@@ -72,13 +130,23 @@ export default function RecallsPage() {
       title="Supply Chain Recall & Quarantine"
       description="Automated provenance graph traversal to identify downstream affected warehouses, distributors, and retail shelves."
       action={
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-rejected px-4 py-2 text-xs font-semibold text-paper transition hover:bg-rejected/85"
-        >
-          <AlertTriangle className="h-4 w-4" />
-          <span>Initiate Product Recall</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            title="Refresh Recalls and Batches"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="inline-flex items-center gap-1.5 rounded-full bg-rejected px-4 py-2 text-xs font-semibold text-paper transition hover:bg-rejected/85"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            <span>Initiate Product Recall</span>
+          </button>
+        </div>
       }
     >
       <div className="grid gap-8 lg:grid-cols-[1.2fr_1.8fr]">
@@ -204,12 +272,46 @@ export default function RecallsPage() {
             <form onSubmit={handleCreateRecall} className="mt-4 space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-mono text-[11px] uppercase text-muted">Target Batch ID *</label>
-                  <input
-                    type="text"
+                  <label className="font-mono text-[11px] uppercase text-muted">Target Batch *</label>
+                  <select
                     required
-                    value={targetBatch}
-                    onChange={(e) => setTargetBatch(e.target.value)}
+                    value={targetBatchCode}
+                    onChange={(e) => handleBatchChange(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-mono outline-none focus:border-ink"
+                  >
+                    {batchList.map((b) => (
+                      <option key={b.id || b.batchCode} value={b.batchCode}>
+                        {b.batchCode} - {b.productName} ({b.quantity} {b.unit})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-mono text-[11px] uppercase text-muted">Initiating Authority / Org *</label>
+                  <select
+                    required
+                    value={initiatedByOrgId}
+                    onChange={(e) => setInitiatedByOrgId(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-mono outline-none focus:border-ink"
+                  >
+                    {orgList.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.organizationType})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-mono text-[11px] uppercase text-muted">Units to Quarantine *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={affectedUnits}
+                    onChange={(e) => setAffectedUnits(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-mono outline-none focus:border-ink"
                   />
                 </div>
@@ -252,7 +354,7 @@ export default function RecallsPage() {
                   type="submit"
                   className="rounded-full bg-rejected px-5 py-2 font-mono text-xs font-semibold text-paper hover:bg-rejected/80"
                 >
-                  Broadcast Recall to Ledger
+                  Broadcast Quarantine Notice
                 </button>
               </div>
             </form>

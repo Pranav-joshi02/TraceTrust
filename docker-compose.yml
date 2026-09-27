@@ -40,7 +40,7 @@ services:
       API_PORT: 4000
     depends_on:
       - postgres
-    command: sh -c "pnpm --filter @trusttrace/database prisma:push && pnpm --filter @trusttrace/api start"
+    command: sh -c "(pnpm --filter @trusttrace/database prisma:push || true) && pnpm --filter @trusttrace/api start"
 
   web:
     build:

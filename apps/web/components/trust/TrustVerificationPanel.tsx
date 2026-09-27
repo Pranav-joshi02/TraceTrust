@@ -145,6 +145,34 @@ export function TrustVerificationPanel({ eventId }: { eventId?: string }) {
         </div>
       </div>
 
+      {/* Dynamic Stored Event Selector */}
+      {availableEvents.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-paper/60 p-3 text-xs">
+          <div className="flex items-center gap-2 flex-1 max-w-xl">
+            <span className="font-mono font-medium text-muted shrink-0">Select Event:</span>
+            <select
+              value={activeEventId}
+              onChange={(e) => setActiveEventId(e.target.value)}
+              className="w-full rounded-lg border border-line bg-white px-3 py-1.5 font-mono text-xs font-semibold text-ink outline-none focus:border-ink"
+            >
+              {availableEvents.map((ev) => (
+                <option key={ev.id || ev.eventCode} value={ev.id || ev.eventCode}>
+                  {ev.eventCode} - {ev.eventType} ({ev.batchCode || 'No Batch'} | {ev.sourceOrgName || 'Unknown Org'})
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => handleRunVerification(activeEventId)}
+            disabled={isRunning}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 font-mono text-xs font-medium text-paper hover:bg-ink/80 disabled:opacity-50"
+          >
+            <Play className={`h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
+            <span>Verify Event</span>
+          </button>
+        </div>
+      )}
+
       {/* Summary Score Banner */}
       <div
         className={`my-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 transition-all ${
@@ -163,7 +191,7 @@ export function TrustVerificationPanel({ eventId }: { eventId?: string }) {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-muted">TARGET: EVT-82A19</span>
+              <span className="font-mono text-xs text-muted">TARGET: {eventTargetName}</span>
               <StatusPill status={trustStatus} />
             </div>
             <p className="mt-0.5 text-xs text-muted">

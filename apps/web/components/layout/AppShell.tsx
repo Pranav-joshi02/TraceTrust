@@ -73,25 +73,25 @@ export function AppShell({ children, title, description, action }: AppShellProps
           </Link>
         </div>
 
-        {/* Database & Ledger Connection Pill */}
+        {/* Network & Ledger Integrity Card */}
         <div className="p-3">
           <div className="rounded-xl border border-line bg-paper/70 p-2.5">
             <div className="flex items-center justify-between text-[11px] font-medium text-muted">
               <span className="flex items-center gap-1.5">
-                <Database className="h-3 w-3 text-verified" />
-                <span>Supabase DB</span>
+                <ShieldCheck className="h-3 w-3 text-verified" />
+                <span>Consortium Network</span>
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-verified">
-                <span className="h-1.5 w-1.5 rounded-full bg-verified"></span>
-                Connected
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-verified">
+                <span className="h-1.5 w-1.5 rounded-full bg-verified animate-pulse"></span>
+                Operational
               </span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-muted">
+            <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted">
               <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3 w-3 text-verified" />
-                <span>Fabric Ledger</span>
+                <Database className="h-3 w-3 text-verified" />
+                <span>Enterprise Ledger</span>
               </span>
-              <span className="font-mono text-[10px]">Synced</span>
+              <span className="font-mono text-[10px] font-semibold text-ink">Synchronized</span>
             </div>
           </div>
         </div>

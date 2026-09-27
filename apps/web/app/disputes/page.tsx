@@ -2,29 +2,90 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockDisputes, Dispute } from '../../lib/data';
-import { fetchDisputes, createDispute } from '../../lib/api';
-import { Scale, AlertCircle, CheckCircle2, Search, ArrowRight, ShieldAlert, FileText, Plus, X } from 'lucide-react';
+import { mockDisputes, Dispute, mockTraceEvents, TraceEvent, mockOrganizations, Organization } from '../../lib/data';
+import { fetchDisputes, createDispute, fetchEvents, fetchOrganizations } from '../../lib/api';
+import { Scale, AlertCircle, CheckCircle2, Search, ArrowRight, ShieldAlert, FileText, Plus, X, RefreshCw } from 'lucide-react';
 import { StatusPill } from '../../components/ui/StatusPill';
 
 export default function DisputesPage() {
   const [disputes, setDisputes] = useState<Dispute[]>(mockDisputes);
   const [selectedDispute, setSelectedDispute] = useState<Dispute>(mockDisputes[0]);
+  const [eventList, setEventList] = useState<TraceEvent[]>(mockTraceEvents);
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // New dispute form state
-  const [eventCode, setEventCode] = useState('EVT-82A19-99');
+  const [targetEventCode, setTargetEventCode] = useState(mockTraceEvents[0].eventCode);
+  const [raisedByOrgId, setRaisedByOrgId] = useState(mockOrganizations[0].id);
+  const [againstOrgId, setAgainstOrgId] = useState(mockOrganizations[1]?.id || mockOrganizations[0].id);
   const [reason, setReason] = useState('');
-  const [againstOrg, setAgainstOrg] = useState('TransGlobal ColdChain');
+
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [disps, events, orgs] = await Promise.all([
+        fetchDisputes(),
+        fetchEvents(),
+        fetchOrganizations()
+      ]);
+      if (disps && disps.length > 0) {
+        setDisputes(disps);
+        setSelectedDispute(disps[0]);
+      }
+      if (events && events.length > 0) {
+        setEventList(events);
+        setTargetEventCode((prev) => (events.some((e) => e.eventCode === prev) ? prev : events[0].eventCode));
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+        setRaisedByOrgId((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[0].id));
+        setAgainstOrgId((prev) => (orgs.some((o) => o.id === prev) ? prev : orgs[1]?.id || orgs[0].id));
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    fetchDisputes().then((data) => {
-      if (data.length > 0) {
-        setDisputes(data);
-        setSelectedDispute(data[0]);
-      }
-    });
+    loadData();
   }, []);
+
+  const handleOpenModal = async () => {
+    setIsModalOpen(true);
+    try {
+      const [events, orgs] = await Promise.all([fetchEvents(), fetchOrganizations()]);
+      if (events && events.length > 0) {
+        setEventList(events);
+        if (!events.some((e) => e.eventCode === targetEventCode)) {
+          setTargetEventCode(events[0].eventCode);
+          autoSuggestOrgsForEvent(events[0], orgs);
+        }
+      }
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+      }
+    } catch (err) {
+      console.warn('Could not refresh data for dispute modal:', err);
+    }
+  };
+
+  const autoSuggestOrgsForEvent = (event: TraceEvent, orgs: Organization[]) => {
+    if (event.destinationOrgId && orgs.some((o) => o.id === event.destinationOrgId)) {
+      setRaisedByOrgId(event.destinationOrgId);
+    }
+    if (event.sourceOrgId && orgs.some((o) => o.id === event.sourceOrgId)) {
+      setAgainstOrgId(event.sourceOrgId);
+    }
+  };
+
+  const handleEventChange = (code: string) => {
+    setTargetEventCode(code);
+    const matched = eventList.find((e) => e.eventCode === code);
+    if (matched) {
+      autoSuggestOrgsForEvent(matched, orgList);
+    }
+  };
 
   const handleResolve = (id: string) => {
     const updated = disputes.map((d) =>
@@ -50,13 +111,17 @@ export default function DisputesPage() {
     e.preventDefault();
     if (!reason) return;
 
+    const matchedEvent = eventList.find((ev) => ev.eventCode === targetEventCode) || eventList[0] || mockTraceEvents[0];
+    const claimantOrg = orgList.find((o) => o.id === raisedByOrgId) || orgList[0] || mockOrganizations[0];
+    const respondentOrg = orgList.find((o) => o.id === againstOrgId) || orgList[1] || mockOrganizations[1] || mockOrganizations[0];
+
     const newDsp: Dispute = {
       id: `dsp-${Date.now()}`,
       disputeCode: `DSP-${Date.now().toString().slice(-4)}`,
-      eventCode,
-      batchCode: 'BATCH-2026-001',
-      raisedBy: 'NatureFresh Markets',
-      againstOrg,
+      eventCode: matchedEvent.eventCode,
+      batchCode: matchedEvent.batchCode || 'BATCH-2026-001',
+      raisedBy: claimantOrg.name,
+      againstOrg: respondentOrg.name,
       reason,
       status: 'OPEN',
       raisedAt: new Date().toISOString().split('T')[0],
@@ -68,7 +133,12 @@ export default function DisputesPage() {
     setIsModalOpen(false);
     setReason('');
 
-    await createDispute(newDsp);
+    await createDispute({
+      ...newDsp,
+      eventId: matchedEvent.id,
+      raisedByOrgId: claimantOrg.id,
+      againstOrgId: respondentOrg.id
+    });
   };
 
   return (
@@ -76,13 +146,23 @@ export default function DisputesPage() {
       title="Consortium Dispute Resolution"
       description="Multi-party reconciliation for anomalous events, quantity mismatches, and signature repudiations."
       action={
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-semibold text-paper transition hover:bg-ink/85"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Raise Dispute</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            title="Refresh Disputes, Events, and Organizations"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-semibold text-paper transition hover:bg-ink/85"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Raise Dispute</span>
+          </button>
+        </div>
       }
     >
       <div className="grid gap-8 lg:grid-cols-[1.2fr_1.8fr]">
@@ -196,26 +276,53 @@ export default function DisputesPage() {
 
             <form onSubmit={handleCreate} className="mt-4 space-y-3 text-xs">
               <div>
-                <label className="font-mono font-medium text-ink">Target Event Code *</label>
-                <input
-                  type="text"
+                <label className="font-mono font-medium text-ink">Target Event *</label>
+                <select
                   required
-                  placeholder="e.g. EVT-82A19-99"
-                  value={eventCode}
-                  onChange={(e) => setEventCode(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono uppercase outline-none focus:border-ink"
-                />
+                  value={targetEventCode}
+                  onChange={(e) => handleEventChange(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
+                >
+                  {eventList.map((ev) => (
+                    <option key={ev.id || ev.eventCode} value={ev.eventCode}>
+                      {ev.eventCode} - {ev.eventType} ({ev.batchCode || 'No Batch'} | {ev.sourceOrgName || 'Unknown Org'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div>
-                <label className="font-mono font-medium text-ink">Respondent Organization</label>
-                <input
-                  type="text"
-                  required
-                  value={againstOrg}
-                  onChange={(e) => setAgainstOrg(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-mono font-medium text-ink">Claimant Org *</label>
+                  <select
+                    required
+                    value={raisedByOrgId}
+                    onChange={(e) => setRaisedByOrgId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
+                  >
+                    {orgList.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.organizationType})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-mono font-medium text-ink">Respondent Org *</label>
+                  <select
+                    required
+                    value={againstOrgId}
+                    onChange={(e) => setAgainstOrgId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2 font-mono outline-none focus:border-ink"
+                  >
+                    {orgList.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.organizationType})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -242,7 +349,7 @@ export default function DisputesPage() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono font-medium text-paper hover:bg-ink/90"
                 >
-                  Submit Dispute to DB
+                  Submit Consortium Dispute
                 </button>
               </div>
             </form>

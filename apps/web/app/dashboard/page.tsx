@@ -70,10 +70,10 @@ export default function DashboardPage() {
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-bold tracking-tight text-ink">{productsCount}</span>
             <span className="inline-flex items-center text-xs font-medium text-verified">
-              <TrendingUp className="mr-0.5 h-3 w-3" /> Live DB
+              <TrendingUp className="mr-0.5 h-3 w-3" /> Certified
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-muted">Active product catalog in database</p>
+          <p className="mt-1 text-[11px] text-muted">Master certified product specifications</p>
         </div>
 
         <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
@@ -84,10 +84,10 @@ export default function DashboardPage() {
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-bold tracking-tight text-ink">{batches.length}</span>
             <span className="inline-flex items-center text-xs font-medium text-verified">
-              <TrendingUp className="mr-0.5 h-3 w-3" /> Live DB
+              <TrendingUp className="mr-0.5 h-3 w-3" /> Active Lots
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-muted">Under active custody or transit</p>
+          <p className="mt-1 text-[11px] text-muted">Under active custody and transit tracking</p>
         </div>
 
         <div className="rounded-2xl border border-verified/30 bg-verified/5 p-5 shadow-sm">

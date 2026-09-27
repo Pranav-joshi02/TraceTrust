@@ -35,21 +35,21 @@ export default function AdminPage() {
 
   const systemStatusCards = [
     {
-      name: 'NestJS REST API',
+      name: 'Consortium Gateway API',
       status: networkStatus ? 'ONLINE' : 'CONNECTING',
       latency: networkStatus ? `${networkStatus.uptime ?? 99.9}% Uptime` : '12ms',
       icon: Server,
       color: 'text-verified'
     },
     {
-      name: 'PostgreSQL Database',
+      name: 'Enterprise Persistence Layer',
       status: 'CONNECTED',
-      latency: networkStatus?.database === 'CONNECTED' ? 'Pooler Active (pgbouncer)' : 'Direct Session',
+      latency: networkStatus?.database === 'CONNECTED' ? 'Pooler Operational' : 'Direct Session Active',
       icon: Database,
       color: 'text-verified'
     },
     {
-      name: 'Hyperledger Fabric',
+      name: 'Immutable Consortium Ledger',
       status: networkStatus?.channel ? `CHANNEL: ${networkStatus.channel}` : 'ACTIVE (4 Nodes)',
       latency: networkStatus?.consensus ?? 'Raft Consensus v2.5',
       icon: Lock,

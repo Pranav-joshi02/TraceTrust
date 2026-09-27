@@ -4,8 +4,8 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/layout/AppShell';
-import { mockBatches, mockProducts, Batch, Product } from '../../lib/data';
-import { fetchBatches, createBatch, fetchProducts } from '../../lib/api';
+import { mockBatches, mockProducts, mockOrganizations, Batch, Product, Organization } from '../../lib/data';
+import { fetchBatches, createBatch, fetchProducts, fetchOrganizations } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { Plus, Search, Layers, ArrowRight, ShieldCheck, QrCode, RefreshCw } from 'lucide-react';
 
@@ -15,7 +15,19 @@ function BatchesContent() {
   const shouldAutoOpen = searchParams.get('create') === 'true' || Boolean(queryProductId);
 
   const [batches, setBatches] = useState<Batch[]>(mockBatches);
-  const [productList, setProductList] = useState<Product[]>(mockProducts);
+  const [productList, setProductList] = useState<Product[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('tt_products');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return mockProducts;
+  });
+  const [orgList, setOrgList] = useState<Organization[]>(mockOrganizations);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,7 +35,19 @@ function BatchesContent() {
 
   // New batch form state
   const [newBatchCode, setNewBatchCode] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState(mockProducts[0].id);
+  const [selectedProduct, setSelectedProduct] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('tt_products');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed[0].id;
+        }
+      } catch {}
+    }
+    return mockProducts[0].id;
+  });
+  const [selectedOwnerOrg, setSelectedOwnerOrg] = useState(mockOrganizations[0].id);
   const [quantity, setQuantity] = useState('5000');
   const [unit, setUnit] = useState('kg');
   const [origin, setOrigin] = useState('Coorg Valley, Karnataka, India');
@@ -31,11 +55,16 @@ function BatchesContent() {
   const loadData = async () => {
     setIsRefreshing(true);
     try {
-      const [fetchedBatches, fetchedProds] = await Promise.all([
+      const [fetchedBatches, fetchedProds, fetchedOrgs] = await Promise.all([
         fetchBatches(),
-        fetchProducts()
+        fetchProducts(),
+        fetchOrganizations()
       ]);
       setBatches(fetchedBatches);
+      if (fetchedOrgs && fetchedOrgs.length > 0) {
+        setOrgList(fetchedOrgs);
+        setSelectedOwnerOrg((prev) => (fetchedOrgs.some((o) => o.id === prev) ? prev : fetchedOrgs[0].id));
+      }
       if (fetchedProds && fetchedProds.length > 0) {
         setProductList(fetchedProds);
         if (queryProductId) {
@@ -43,14 +72,25 @@ function BatchesContent() {
           if (match) {
             setSelectedProduct(match.id);
             setUnit(match.unitOfMeasure || 'kg');
+            if (match.organizationId) {
+              setSelectedOwnerOrg(match.organizationId);
+            }
           } else {
             setSelectedProduct(fetchedProds[0].id);
             setUnit(fetchedProds[0].unitOfMeasure || 'kg');
           }
         } else {
-          setSelectedProduct((prev) => {
+          setSelectedProduct((prev: string) => {
             const exists = fetchedProds.some((p) => p.id === prev);
-            return exists ? prev : fetchedProds[0].id;
+            const targetId = exists ? prev : fetchedProds[0].id;
+            const targetProd = fetchedProds.find((p) => p.id === targetId);
+            if (targetProd?.unitOfMeasure) {
+              setUnit(targetProd.unitOfMeasure);
+            }
+            if (targetProd?.organizationId) {
+              setSelectedOwnerOrg(targetProd.organizationId);
+            }
+            return targetId;
           });
         }
       }
@@ -68,26 +108,40 @@ function BatchesContent() {
 
   const handleOpenCreateModal = async () => {
     setIsModalOpen(true);
-    // Refresh products on modal open to always show newest registered products
+    // Refresh products & orgs on modal open to always show newest registered records
     try {
-      const prods = await fetchProducts();
+      const [prods, orgs] = await Promise.all([fetchProducts(), fetchOrganizations()]);
+      if (orgs && orgs.length > 0) {
+        setOrgList(orgs);
+      }
       if (prods && prods.length > 0) {
         setProductList(prods);
-        if (!selectedProduct || !prods.some((p) => p.id === selectedProduct)) {
-          setSelectedProduct(prods[0].id);
-          setUnit(prods[0].unitOfMeasure || 'kg');
-        }
+        setSelectedProduct((prev: string) => {
+          const exists = prods.some((p) => p.id === prev);
+          const targetId = exists ? prev : prods[0].id;
+          const targetProd = prods.find((p) => p.id === targetId);
+          if (targetProd?.unitOfMeasure) {
+            setUnit(targetProd.unitOfMeasure);
+          }
+          if (targetProd?.organizationId) {
+            setSelectedOwnerOrg(targetProd.organizationId);
+          }
+          return targetId;
+        });
       }
     } catch (err) {
-      console.warn('Could not refresh products for modal:', err);
+      console.warn('Could not refresh data for modal:', err);
     }
   };
 
   const handleProductChange = (productId: string) => {
     setSelectedProduct(productId);
     const prod = productList.find((p) => p.id === productId);
-    if (prod && prod.unitOfMeasure) {
-      setUnit(prod.unitOfMeasure);
+    if (prod) {
+      if (prod.unitOfMeasure) setUnit(prod.unitOfMeasure);
+      if (prod.organizationId && orgList.some((o) => o.id === prod.organizationId)) {
+        setSelectedOwnerOrg(prod.organizationId);
+      }
     }
   };
 
@@ -102,6 +156,8 @@ function BatchesContent() {
     if (!newBatchCode) return;
 
     const prod = productList.find((p) => p.id === selectedProduct) || productList[0] || mockProducts[0];
+    const ownerOrg = orgList.find((o) => o.id === selectedOwnerOrg) || orgList[0] || mockOrganizations[0];
+
     const newBatch: Batch = {
       id: `batch-${Date.now()}`,
       batchCode: newBatchCode.toUpperCase(),
@@ -111,8 +167,8 @@ function BatchesContent() {
       unit: prod.unitOfMeasure || unit,
       productionDate: new Date().toISOString().split('T')[0],
       expiryDate: '2027-09-25',
-      currentOwnerOrgId: prod.organizationId || 'org-1',
-      currentOwnerName: prod.organizationName || 'Highland Organics Estate',
+      currentOwnerOrgId: ownerOrg.id,
+      currentOwnerName: ownerOrg.name,
       status: 'AVAILABLE',
       originLocation: origin,
       trustScore: 95,
@@ -125,8 +181,10 @@ function BatchesContent() {
 
     await createBatch({
       ...newBatch,
-      productCode: prod.productCode
+      productCode: prod.productCode,
+      currentOwnerCode: ownerOrg.organizationCode
     });
+    await loadData();
   };
 
   return (
@@ -141,14 +199,14 @@ function BatchesContent() {
             className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sync</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={handleOpenCreateModal}
             className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
           >
             <Plus className="h-4 w-4" />
-            <span>Create Batch</span>
+            <span>Register Batch</span>
           </button>
         </div>
       }
@@ -245,8 +303,8 @@ function BatchesContent() {
           <div className="w-full max-w-lg rounded-2xl border border-line bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-line pb-4">
               <div>
-                <h3 className="text-lg font-bold text-ink">Register Production Batch</h3>
-                <p className="text-xs text-muted mt-0.5">Assign an initial custody batch against a registered product.</p>
+                <h3 className="text-lg font-bold text-ink">Register Production Lot</h3>
+                <p className="text-xs text-muted mt-0.5">Assign an initial custody lot and cryptographic proofs against a certified product.</p>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -260,7 +318,7 @@ function BatchesContent() {
               <div>
                 <div className="flex items-center justify-between">
                   <label className="font-mono text-[11px] uppercase text-muted">
-                    Select Product * ({productList.length} available)
+                    Product Specification * ({productList.length} available)
                   </label>
                   <Link
                     href="/products"
@@ -282,14 +340,39 @@ function BatchesContent() {
                 </select>
                 {productList.length === 0 && (
                   <p className="mt-1 font-mono text-[11px] text-pending">
-                    No products loaded. Please create a product first in the Product Registry.
+                    No registered products found. Please configure a product in the Product Registry first.
                   </p>
                 )}
               </div>
 
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="font-mono text-[11px] uppercase text-muted">
+                    Initial Custodian / Operating Entity * ({orgList.length} verified)
+                  </label>
+                  <Link
+                    href="/organizations"
+                    className="font-mono text-[11px] text-ink hover:underline flex items-center gap-1"
+                  >
+                    <span>+ View Organizations</span>
+                  </Link>
+                </div>
+                <select
+                  value={selectedOwnerOrg}
+                  onChange={(e) => setSelectedOwnerOrg(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-paper p-2 font-medium outline-none focus:border-ink"
+                >
+                  {orgList.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} ({o.organizationCode} • {o.organizationType})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-mono text-[11px] uppercase text-muted">Batch Code *</label>
+                  <label className="font-mono text-[11px] uppercase text-muted">Lot Identifier / Batch Code *</label>
                   <input
                     type="text"
                     required
@@ -300,7 +383,7 @@ function BatchesContent() {
                   />
                 </div>
                 <div>
-                  <label className="font-mono text-[11px] uppercase text-muted">Quantity</label>
+                  <label className="font-mono text-[11px] uppercase text-muted">Lot Quantity</label>
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -320,12 +403,12 @@ function BatchesContent() {
               </div>
 
               <div>
-                <label className="font-mono text-[11px] uppercase text-muted">Origin Harvest / Production Location</label>
+                <label className="font-mono text-[11px] uppercase text-muted">Harvest / Origin Facility Location</label>
                 <input
                   type="text"
                   value={origin}
                   onChange={(e) => setOrigin(e.target.value)}
-                  placeholder="Estate, GPS or facility name"
+                  placeholder="Facility, estate origin, or geographic coordinates"
                   className="mt-1 w-full rounded-lg border border-line bg-paper p-2 outline-none focus:border-ink"
                 />
               </div>
@@ -342,7 +425,7 @@ function BatchesContent() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono text-xs font-semibold text-paper hover:bg-ink/80"
                 >
-                  Save to Database
+                  Confirm Lot Registration
                 </button>
               </div>
             </form>

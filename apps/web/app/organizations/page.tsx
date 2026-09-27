@@ -5,13 +5,14 @@ import { AppShell } from '../../components/layout/AppShell';
 import { mockOrganizations, Organization } from '../../lib/data';
 import { fetchOrganizations, createOrganization } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { Building2, Search, Plus, ShieldCheck, Globe, CheckCircle2, X } from 'lucide-react';
+import { Building2, Search, Plus, ShieldCheck, Globe, CheckCircle2, X, RefreshCw } from 'lucide-react';
 
 export default function OrganizationsPage() {
   const [orgs, setOrgs] = useState<Organization[]>(mockOrganizations);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -20,8 +21,18 @@ export default function OrganizationsPage() {
   const [country, setCountry] = useState('India');
   const [email, setEmail] = useState('');
 
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const data = await fetchOrganizations();
+      if (data && data.length > 0) setOrgs(data);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    fetchOrganizations().then((data) => setOrgs(data));
+    loadData();
   }, []);
 
   const filtered = orgs.filter((o) => {
@@ -73,13 +84,23 @@ export default function OrganizationsPage() {
       title="Consortium Organizations"
       description="Cryptographically credentialed supply chain participants with enrolled Hyperledger Fabric MSP identities."
       action={
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Register Organization</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            title="Refresh Organizations"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-xs font-mono text-muted transition hover:text-ink hover:bg-paper"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-xs font-medium text-paper transition hover:bg-ink/80"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Register Organization</span>
+          </button>
+        </div>
       }
     >
       {/* Search and Role Filters */}
@@ -243,7 +264,7 @@ export default function OrganizationsPage() {
                   type="submit"
                   className="rounded-full bg-ink px-5 py-2 font-mono font-medium text-paper hover:bg-ink/90"
                 >
-                  Save to Database
+                  Onboard Organization
                 </button>
               </div>
             </form>

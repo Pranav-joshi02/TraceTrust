@@ -13,7 +13,8 @@
     "db:migrate": "node scripts/sync-env.js && corepack pnpm --filter @trusttrace/database prisma:migrate",
     "db:deploy": "node scripts/sync-env.js && corepack pnpm --filter @trusttrace/database prisma:deploy",
     "db:push": "node scripts/sync-env.js && corepack pnpm --filter @trusttrace/database prisma:push",
-    "db:seed": "node scripts/sync-env.js && corepack pnpm --filter @trusttrace/database seed"
+    "db:seed": "node scripts/sync-env.js && corepack pnpm --filter @trusttrace/database seed",
+    "cli": "corepack pnpm --filter @trusttrace/cli dev"
   },
   "devDependencies": {
     "turbo": "^2.1.3",
