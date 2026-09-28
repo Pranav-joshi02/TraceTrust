@@ -3,6 +3,7 @@ import { BatchesService } from './batches.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('batches')
 @UseGuards(AuthGuard, RolesGuard)
@@ -10,9 +11,9 @@ export class BatchesController {
   constructor(private readonly batches: BatchesService) {}
 
   @Post()
-  @Roles('admin', 'operator')
-  create(@Body() body: Record<string, unknown>) {
-    return this.batches.create(body);
+  @Roles('ADMIN', 'OPERATOR')
+  create(@Body() body: Record<string, unknown>, @CurrentUser() user: any) {
+    return this.batches.create(body, user);
   }
 
   @Get()

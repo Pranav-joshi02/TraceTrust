@@ -12,6 +12,7 @@ import { registerAudit } from './commands/audit';
 import { registerCertificate } from './commands/certificate';
 import { registerNetwork } from './commands/network';
 import { registerConfig } from './commands/config';
+import { registerApply } from './commands/apply';
 import { ApiClient } from './services/api-client';
 
 const program = new Command();
@@ -22,8 +23,9 @@ program
   .description('Trust-First, Permissioned Blockchain Platform for Supply Chain Traceability')
   .version('0.1.0');
 
-// Register all PRD Section 22 CLI commands
+// Register all PRD Section 22 CLI commands + declarative manifest apply
 registerAuth(program, api);
+registerApply(program, api);
 registerStatus(program, api);
 registerProduct(program, api);
 registerBatch(program, api);

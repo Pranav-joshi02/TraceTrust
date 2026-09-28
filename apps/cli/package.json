@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "trusttrace": "dist/index.js"
+    "trusttrace": "dist/index.js",
+    "tracetrust": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -12,7 +13,8 @@
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",

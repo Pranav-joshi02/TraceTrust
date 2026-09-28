@@ -58,7 +58,7 @@ const navItems: NavItem[] = [
   { href: '/disputes', label: 'Disputes', icon: Scale },
   { href: '/organizations', label: 'Organizations', icon: Building2 },
   { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/admin', label: 'Admin Console', icon: ShieldAlert, requiredRole: 'admin' }
+  { href: '/admin', label: 'Admin Console', icon: ShieldAlert, requiredRole: 'ADMIN' }
 ];
 
 export function AppShell({ children, title, description, action }: AppShellProps) {
@@ -75,14 +75,14 @@ export function AppShell({ children, title, description, action }: AppShellProps
     });
   }, [loadSession]);
 
-  const userRoles = user?.roles || ['operator'];
+  const userRoles = (user?.roles || []).map((r) => r.toUpperCase());
   const userInitials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
 
   const visibleNavItems = navItems.filter((item) => {
     if (!item.requiredRole) return true;
-    return userRoles.includes(item.requiredRole);
+    return userRoles.includes(item.requiredRole.toUpperCase());
   });
 
   const isSimulated = networkStatus?.mode === 'SIMULATED' || !networkStatus?.fabricAvailable;

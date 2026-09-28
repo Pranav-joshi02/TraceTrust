@@ -1,0 +1,31 @@
+# ============================================================================
+# TrustTrace Product Catalog Manifest (YAML)
+# Multiple products separated by standard '---'
+# ============================================================================
+
+name: Coorg Highland Peaberry Reserve
+productCode: PROD-PEABERRY-01
+sku: SKU-PBY-500G
+gtin: "08412345678950"
+category: Coffee
+unitOfMeasure: kg
+description: Single-estate hand-sorted peaberry beans from Southern high elevations.
+metadata:
+  shadeGrown: true
+  altitudeMeters: 1450
+  certifications:
+    - Rainforest Alliance
+    - USDA Organic
+
+---
+
+name: Nilgiri Cloud Forest Black Tea
+productCode: PROD-TEA-NIL-02
+sku: SKU-TEA-250G
+gtin: "08412345678967"
+category: Tea
+unitOfMeasure: kg
+description: Whole-leaf orthodox black tea harvested during early spring flush.
+metadata:
+  harvestSeason: "Spring 2026"
+  organicCertified: true

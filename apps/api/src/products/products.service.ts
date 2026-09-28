@@ -5,10 +5,22 @@ import { PrismaService } from '../common/prisma/prisma.service';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(body: Record<string, unknown>) {
-    const organization = await this.prisma.organization.findFirst({
-      where: { OR: [{ id: String(body.organizationId ?? '') }, { organizationCode: String(body.organizationCode ?? 'SUPPLIER-001') }] }
-    });
+  async create(body: Record<string, unknown>, user?: any) {
+    // Determine organization: non-admins are locked to their own org
+    let orgId: string;
+    const isAdmin = user?.roles?.includes('ADMIN');
+
+    if (user?.organizationId && !isAdmin) {
+      orgId = user.organizationId;
+    } else {
+      const organization = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(body.organizationId ?? '') }, { organizationCode: String(body.organizationCode ?? '') }] }
+      });
+      if (!organization) throw new NotFoundException('Organization not found');
+      orgId = organization.id;
+    }
+
+    const organization = await this.prisma.organization.findUnique({ where: { id: orgId } });
     if (!organization) throw new NotFoundException('Organization not found');
 
     return this.prisma.product.create({

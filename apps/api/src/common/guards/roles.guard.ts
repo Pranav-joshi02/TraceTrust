@@ -29,10 +29,13 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Access denied: no roles assigned.');
     }
 
-    const hasRole = requiredRoles.some((role) => user.roles.includes(role));
+    const userRoles = (user.roles || []).map((r: string) => String(r).toUpperCase());
+    const normalizedRequired = requiredRoles.map((r: string) => String(r).toUpperCase());
+
+    const hasRole = normalizedRequired.some((role) => userRoles.includes(role));
     if (!hasRole) {
       throw new ForbiddenException(
-        `Access denied: requires one of [${requiredRoles.join(', ')}]. Your roles: [${user.roles.join(', ')}].`
+        `Access denied: requires one of [${normalizedRequired.join(', ')}]. Your roles: [${userRoles.join(', ')}].`
       );
     }
 

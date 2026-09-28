@@ -1,0 +1,29 @@
+# ============================================================================
+# TrustTrace Unified Manifest (Product + Child Batches)
+# ============================================================================
+
+product:
+  name: Himalayan Wild Honey Blossom
+  productCode: PROD-HONEY-HIM-05
+  sku: SKU-HNY-500G
+  gtin: "08412345678998"
+  category: Honey
+  unitOfMeasure: kg
+  description: Unprocessed multi-floral honey cold-extracted from high altitude alpine flora.
+
+batches:
+  - batchCode: BATCH-2026-HNY-001
+    quantity: 450
+    unit: kg
+    productionDate: "2026-09-10"
+    expiryDate: "2028-09-10"
+    originLocation: "Parvati Valley Apiary, Himachal Pradesh"
+    status: CREATED
+
+  - batchCode: BATCH-2026-HNY-002
+    quantity: 380
+    unit: kg
+    productionDate: "2026-09-14"
+    expiryDate: "2028-09-14"
+    originLocation: "Tirthan Wildlife Sanctuary Buffer Zone"
+    status: CREATED

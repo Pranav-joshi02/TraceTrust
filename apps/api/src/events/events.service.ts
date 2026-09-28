@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { sha256 } from '@trusttrace/crypto';
 import { buildObjectEvent } from '@trusttrace/epcis';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -7,16 +7,30 @@ import { PrismaService } from '../common/prisma/prisma.service';
 export class EventsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(body: Record<string, unknown>) {
+  async create(body: Record<string, unknown>, user?: any) {
     const batch = await this.prisma.batch.findFirst({
       where: { OR: [{ id: String(body.batchId ?? '') }, { batchCode: String(body.batch ?? body.batchCode ?? '') }] },
       include: { product: true }
     });
     if (!batch) throw new NotFoundException('Batch not found');
 
-    const source = await this.prisma.organization.findFirst({
-      where: { OR: [{ id: String(body.sourceOrgId ?? '') }, { organizationCode: String(body.sourceOrganization ?? body.sourceOrgCode ?? 'SUPPLIER-001') }] }
-    });
+    // Determine source organization: non-admins are locked to their own org
+    let sourceOrgId: string;
+    const isAdmin = user?.roles?.includes('ADMIN');
+
+    if (user?.organizationId && !isAdmin) {
+      // Non-admin: force to their own organization, ignore body field
+      sourceOrgId = user.organizationId;
+    } else {
+      // Admin or no user context: resolve from body
+      const source = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(body.sourceOrgId ?? '') }, { organizationCode: String(body.sourceOrganization ?? body.sourceOrgCode ?? '') }] }
+      });
+      if (!source) throw new NotFoundException('Source organization not found');
+      sourceOrgId = source.id;
+    }
+
+    const source = await this.prisma.organization.findUnique({ where: { id: sourceOrgId } });
     if (!source) throw new NotFoundException('Source organization not found');
 
     const destinationCode = body.destinationOrganization ?? body.destinationOrgCode ?? body.destination;

@@ -72,7 +72,7 @@ export class AuthGuard implements CanActivate {
         organizationName: user.organization?.name,
         organizationCode: user.organization?.organizationCode,
         organizationType: user.organization?.organizationType,
-        roles: user.roles.map((r) => r.role.name),
+        roles: user.roles.map((r) => r.role.name.toUpperCase()),
       };
 
       return true;

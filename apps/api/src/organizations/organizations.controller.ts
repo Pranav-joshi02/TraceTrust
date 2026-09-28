@@ -10,7 +10,7 @@ export class OrganizationsController {
   constructor(private readonly organizations: OrganizationsService) {}
 
   @Post()
-  @Roles('admin')
+  @Roles('ADMIN')
   create(@Body() body: Record<string, unknown>) {
     return this.organizations.create(body);
   }

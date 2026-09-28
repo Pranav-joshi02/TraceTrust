@@ -1,0 +1,15 @@
+name: Malabar Monsooned Gold Roast
+productCode: PROD-MONSOON-03
+sku: SKU-MON-1KG
+gtin: 08412345678974
+category: Coffee
+unitOfMeasure: kg
+description: Naturally sun-cured beans exposed to Arabian Sea monsoon winds.
+---
+name: Cardamom Hills Single Estate Pods
+productCode: PROD-SPICE-CRD-04
+sku: SKU-CRD-100G
+gtin: 08412345678981
+category: Spices
+unitOfMeasure: kg
+description: Jumbo green cardamom pods handpicked in Idukki Valley.

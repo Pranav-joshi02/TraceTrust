@@ -4,12 +4,21 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
 import { ShieldAlert, Server, Cpu, Database, CheckCircle2, AlertTriangle, Users, Lock, RefreshCw } from 'lucide-react';
 import { fetchNetworkStatus, fetchNetworkChaincode, fetchOrganizations } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth-store';
 
 export default function AdminPage() {
+  const { user, loadSession } = useAuthStore();
   const [networkStatus, setNetworkStatus] = useState<any>(null);
   const [chaincodes, setChaincodes] = useState<any[]>([]);
   const [pendingOrgs, setPendingOrgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
+  const userRoles = (user?.roles || []).map((r) => r.toUpperCase());
+  const isAdmin = userRoles.includes('ADMIN');
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -30,8 +39,28 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    loadAdminData();
-  }, []);
+    if (isAdmin) loadAdminData();
+  }, [isAdmin]);
+
+  if (!isAdmin) {
+    return (
+      <AppShell title="Admin Console" description="Consortium administration">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+          <h2 className="text-2xl font-semibold text-ink">Access Denied</h2>
+          <p className="mt-2 max-w-md text-muted">
+            You do not have the <span className="font-mono font-semibold text-red-600">ADMIN</span> role required to access the Admin Console.
+            Contact your consortium administrator to request elevated privileges.
+          </p>
+          <p className="mt-4 text-sm text-muted">
+            Your current roles: <span className="font-mono">{userRoles.length > 0 ? userRoles.join(', ') : 'none'}</span>
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
 
   const systemStatusCards = [
     {

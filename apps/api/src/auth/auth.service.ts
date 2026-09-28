@@ -76,15 +76,18 @@ export class AuthService {
       },
     });
 
-    // Assign default 'operator' role if it exists
-    const operatorRole = await this.prisma.role.findUnique({ where: { name: 'operator' } });
+    // Assign default 'OPERATOR' role
+    const operatorRole = await this.prisma.role.findFirst({
+      where: { name: { in: ['OPERATOR', 'operator'] } },
+    });
+    let roles = ['OPERATOR'];
     if (operatorRole) {
       await this.prisma.userRole.create({
         data: { userId: user.id, roleId: operatorRole.id },
       }).catch(() => { /* ignore if already exists */ });
+      roles = [operatorRole.name.toUpperCase()];
     }
 
-    const roles = user.roles.map((r) => r.role.name);
     const accessToken = this.signToken({
       sub: user.id,
       email: user.email,
@@ -129,26 +132,8 @@ export class AuthService {
       throw new UnauthorizedException('Account is suspended or inactive.');
     }
 
-    // Verify password with bcrypt
-    let isPasswordValid = false;
-    try {
-      if (user.passwordHash && user.passwordHash.length === 60 && user.passwordHash.startsWith('$2b$')) {
-        isPasswordValid = await bcrypt.compare(body.password, user.passwordHash);
-      } else if (user.passwordHash === '$2b$10$demo-password-hash') {
-        // Upgrade seed placeholder to real bcrypt hash upon first login
-        isPasswordValid = body.password === 'Password123!' || body.password === 'admin123' || body.password.length >= 6;
-        if (isPasswordValid) {
-          const newHash = await bcrypt.hash(body.password, SALT_ROUNDS);
-          await this.prisma.user.update({
-            where: { id: user.id },
-            data: { passwordHash: newHash },
-          });
-        }
-      }
-    } catch {
-      isPasswordValid = false;
-    }
-
+    // Verify password strictly with bcrypt
+    const isPasswordValid = await bcrypt.compare(body.password, user.passwordHash).catch(() => false);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password.');
     }
@@ -159,7 +144,7 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    const roles = user.roles.map((r) => r.role.name);
+    const roles = user.roles.map((r) => r.role.name.toUpperCase());
     const accessToken = this.signToken({
       sub: user.id,
       email: user.email,
@@ -207,7 +192,7 @@ export class AuthService {
       organizationName: user.organization?.name,
       organizationCode: user.organization?.organizationCode,
       organizationType: user.organization?.organizationType,
-      roles: user.roles.map((r) => r.role.name),
+      roles: user.roles.map((r) => r.role.name.toUpperCase()),
       status: user.status,
       lastLoginAt: user.lastLoginAt,
     };

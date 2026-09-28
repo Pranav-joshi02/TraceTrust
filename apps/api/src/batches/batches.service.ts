@@ -5,15 +5,27 @@ import { PrismaService } from '../common/prisma/prisma.service';
 export class BatchesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(body: Record<string, unknown>) {
+  async create(body: Record<string, unknown>, user?: any) {
     const product = await this.prisma.product.findFirst({
       where: { OR: [{ id: String(body.productId ?? '') }, { productCode: String(body.productCode ?? body.product ?? '') }] }
     });
     if (!product) throw new NotFoundException('Product not found');
 
-    const owner = await this.prisma.organization.findFirst({
-      where: { OR: [{ id: String(body.currentOwnerOrgId ?? '') }, { organizationCode: String(body.ownerCode ?? body.currentOwner ?? 'SUPPLIER-001') }] }
-    });
+    // Determine owner organization: non-admins are locked to their own org
+    let ownerOrgId: string;
+    const isAdmin = user?.roles?.includes('ADMIN');
+
+    if (user?.organizationId && !isAdmin) {
+      ownerOrgId = user.organizationId;
+    } else {
+      const owner = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(body.currentOwnerOrgId ?? '') }, { organizationCode: String(body.ownerCode ?? body.currentOwner ?? '') }] }
+      });
+      if (!owner) throw new NotFoundException('Owner organization not found');
+      ownerOrgId = owner.id;
+    }
+
+    const owner = await this.prisma.organization.findUnique({ where: { id: ownerOrgId } });
     if (!owner) throw new NotFoundException('Owner organization not found');
 
     return this.prisma.batch.create({

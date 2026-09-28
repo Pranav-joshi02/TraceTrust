@@ -16,8 +16,8 @@ export class EvidenceService {
    * Create evidence from an actual uploaded file.
    * Hashes the real file bytes with SHA-256, uploads to MinIO.
    */
-  async createFromFile(file: Express.Multer.File, body: Record<string, unknown>) {
-    const org = await this.findOrganization(body);
+  async createFromFile(file: Express.Multer.File, body: Record<string, unknown>, user?: any) {
+    const org = await this.findOrganization(body, user);
 
     // Upload to MinIO and compute SHA-256 of actual file bytes
     const { storageKey, sha256Hash, fileSize } = await this.minio.uploadFile(
@@ -54,8 +54,8 @@ export class EvidenceService {
    * Create evidence from JSON metadata only (no actual file).
    * Clearly marked as metadata-only — the hash is NOT from real file bytes.
    */
-  async createMetadataOnly(body: Record<string, unknown>) {
-    const org = await this.findOrganization(body);
+  async createMetadataOnly(body: Record<string, unknown>, user?: any) {
+    const org = await this.findOrganization(body, user);
 
     const fileName = String(body.fileName ?? 'evidence.pdf');
     const contentToHash = body.content ? String(body.content) : `${fileName}:${Date.now()}`;
@@ -88,12 +88,20 @@ export class EvidenceService {
     };
   }
 
-  private async findOrganization(body: Record<string, unknown>) {
+  private async findOrganization(body: Record<string, unknown>, user?: any) {
+    // Non-admins are locked to their own organization
+    const isAdmin = user?.roles?.includes('ADMIN');
+    if (user?.organizationId && !isAdmin) {
+      const org = await this.prisma.organization.findUnique({ where: { id: user.organizationId } });
+      if (!org) throw new NotFoundException('Organization not found');
+      return org;
+    }
+
     const org = await this.prisma.organization.findFirst({
       where: {
         OR: [
           { id: String(body.organizationId ?? '') },
-          { organizationCode: String(body.organizationCode ?? 'SUPPLIER-001') }
+          { organizationCode: String(body.organizationCode ?? '') }
         ]
       }
     });

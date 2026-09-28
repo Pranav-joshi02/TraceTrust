@@ -36,6 +36,22 @@ export class TraceabilityService {
       }
     }
 
+    // Sanitize org data in events to prevent leaking sensitive contact info
+    const sanitizeOrg = (org: any) => org ? ({
+      id: org.id,
+      name: org.name,
+      organizationCode: org.organizationCode,
+      organizationType: org.organizationType,
+      country: org.country,
+      status: org.status,
+    }) : null;
+
+    const sanitizedEvents = batch.events.map((event) => ({
+      ...event,
+      sourceOrg: sanitizeOrg(event.sourceOrg),
+      destinationOrg: sanitizeOrg(event.destinationOrg),
+    }));
+
     return {
       batchCode: batch.batchCode,
       productName: batch.product.name,
@@ -52,7 +68,7 @@ export class TraceabilityService {
         transactionId: event.blockchainTx?.transactionId,
         occurredAt: event.eventTime.toISOString()
       })),
-      events: batch.events
+      events: sanitizedEvents
     };
   }
 }

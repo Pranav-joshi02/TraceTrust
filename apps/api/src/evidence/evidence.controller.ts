@@ -4,6 +4,7 @@ import { EvidenceService } from './evidence.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('evidence')
 @UseGuards(AuthGuard, RolesGuard)
@@ -16,22 +17,23 @@ export class EvidenceController {
    * Additional form fields: organizationId, organizationCode, mimeType
    */
   @Post()
-  @Roles('admin', 'operator', 'auditor')
+  @Roles('ADMIN', 'OPERATOR', 'AUDITOR')
   @UseInterceptors(FileInterceptor('file', {
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
   }))
   async create(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: Record<string, unknown>,
+    @CurrentUser() user: any,
   ) {
     if (file) {
       // Real file upload — hash actual bytes
-      return this.evidence.createFromFile(file, body);
+      return this.evidence.createFromFile(file, body, user);
     }
 
     // Fallback: JSON-only metadata submission (for backward compat / testing)
     // But clearly mark it as metadata-only
-    return this.evidence.createMetadataOnly(body);
+    return this.evidence.createMetadataOnly(body, user);
   }
 
   @Get()

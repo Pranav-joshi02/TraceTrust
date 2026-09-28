@@ -56,11 +56,37 @@ export class QrCodesService {
       orderBy: { eventTime: 'asc' }
     });
 
+    // Sanitize sensitive data for public endpoint — strip email, phone, address, registrationNumber
+    const sanitizeOrg = (org: any) => org ? {
+      name: org.name,
+      organizationCode: org.organizationCode,
+      organizationType: org.organizationType,
+      country: org.country,
+      status: org.status,
+    } : null;
+
     return {
       qrCode: { id: qrCode.id, publicCode: qrCode.publicCode, scanCount: qrCode.scanCount + 1, status: qrCode.status },
-      batch: qrCode.batch,
-      product: qrCode.batch.product,
-      owner: qrCode.batch.currentOwner,
+      batch: {
+        id: qrCode.batch.id,
+        batchCode: qrCode.batch.batchCode,
+        quantity: qrCode.batch.quantity,
+        unit: qrCode.batch.unit,
+        productionDate: qrCode.batch.productionDate,
+        expiryDate: qrCode.batch.expiryDate,
+        status: qrCode.batch.status,
+        originLocation: qrCode.batch.originLocation,
+      },
+      product: qrCode.batch.product ? {
+        id: qrCode.batch.product.id,
+        productCode: qrCode.batch.product.productCode,
+        name: qrCode.batch.product.name,
+        description: qrCode.batch.product.description,
+        category: qrCode.batch.product.category,
+        unitOfMeasure: qrCode.batch.product.unitOfMeasure,
+        status: qrCode.batch.product.status,
+      } : null,
+      owner: sanitizeOrg(qrCode.batch.currentOwner),
       events: events.map((e) => ({
         eventCode: e.eventCode,
         eventType: e.eventType,
@@ -71,7 +97,7 @@ export class QrCodesService {
         trustStatus: e.trustStatus,
         blockchainTxId: e.blockchainTx?.transactionId
       })),
-      verified: true
+      verified: qrCode.status === 'ACTIVE'
     };
   }
 

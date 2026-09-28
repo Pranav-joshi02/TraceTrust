@@ -3,6 +3,7 @@ import { RecallsService } from './recalls.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('recalls')
 @UseGuards(AuthGuard, RolesGuard)
@@ -10,9 +11,9 @@ export class RecallsController {
   constructor(private readonly recalls: RecallsService) {}
 
   @Post()
-  @Roles('admin', 'operator')
-  create(@Body() body: Record<string, unknown>) {
-    return this.recalls.create(body);
+  @Roles('ADMIN', 'OPERATOR')
+  create(@Body() body: Record<string, unknown>, @CurrentUser() user: any) {
+    return this.recalls.create(body, user);
   }
 
   @Get()

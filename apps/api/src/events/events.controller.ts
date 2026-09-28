@@ -4,6 +4,7 @@ import { TrustService } from '../trust/trust.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('events')
 @UseGuards(AuthGuard, RolesGuard)
@@ -14,9 +15,9 @@ export class EventsController {
   ) {}
 
   @Post()
-  @Roles('admin', 'operator')
-  create(@Body() body: Record<string, unknown>) {
-    return this.events.create(body);
+  @Roles('ADMIN', 'OPERATOR')
+  create(@Body() body: Record<string, unknown>, @CurrentUser() user: any) {
+    return this.events.create(body, user);
   }
 
   @Get()
