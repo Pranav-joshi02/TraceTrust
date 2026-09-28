@@ -484,6 +484,11 @@ export async function createOrganization(payload: Partial<Organization>): Promis
   return newOrg;
 }
 
+export async function fetchOrganizationById(id: string): Promise<Organization | null> {
+  const orgs = await fetchOrganizations();
+  return orgs.find((o) => o.id === id || o.organizationCode === id) || null;
+}
+
 // ==========================================
 // RECALLS
 // ==========================================
@@ -829,6 +834,8 @@ export async function fetchAuditLogs(): Promise<AuditRecord[]> {
   return mockAuditLogs;
 }
 
+export const fetchAudits = fetchAuditLogs;
+
 // ==========================================
 // TRUST VERIFICATION ENGINE
 // ==========================================
@@ -975,4 +982,38 @@ export async function fetchNetworkChaincode(): Promise<any> {
     return null;
   }
 }
+
+// ==========================================
+// EVIDENCE FILE UPLOAD (MINIO S3 + SHA-256)
+// ==========================================
+export async function uploadEvidenceFile(
+  file: File,
+  meta?: { organizationId?: string; organizationCode?: string; eventCode?: string }
+): Promise<any> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (meta?.organizationId) formData.append('organizationId', meta.organizationId);
+  if (meta?.organizationCode) formData.append('organizationCode', meta.organizationCode);
+  if (meta?.eventCode) formData.append('eventCode', meta.eventCode);
+
+  const headers: Record<string, string> = {};
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('tt_auth_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${BASE_URL}/api/evidence`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'File upload failed' }));
+    throw new Error(err.message || 'File upload failed');
+  }
+
+  return res.json();
+}
+
 

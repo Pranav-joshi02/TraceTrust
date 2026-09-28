@@ -151,7 +151,7 @@ async function main() {
     create: {
       organizationId: supplierOrg.id,
       email: 'admin@trusttrace.local',
-      passwordHash: '$2b$10$demo-password-hash',
+      passwordHash: '$2b$10$039V.DNPAnRXfOOPh0t.je3H7BcEDutbG2BiFtEgWhG5Qq7FfgYpm',
       firstName: 'Pranav',
       lastName: 'Joshi',
       status: 'ACTIVE'
@@ -170,7 +170,7 @@ async function main() {
     create: {
       organizationId: supplierOrg.id,
       email: 'operator@highlandorganics.example',
-      passwordHash: '$2b$10$demo-password-hash',
+      passwordHash: '$2b$10$039V.DNPAnRXfOOPh0t.je3H7BcEDutbG2BiFtEgWhG5Qq7FfgYpm',
       firstName: 'Rajesh',
       lastName: 'Kumar',
       status: 'ACTIVE'
@@ -189,7 +189,7 @@ async function main() {
     create: {
       organizationId: auditorOrg.id,
       email: 'auditor@sgs-verify.example',
-      passwordHash: '$2b$10$demo-password-hash',
+      passwordHash: '$2b$10$039V.DNPAnRXfOOPh0t.je3H7BcEDutbG2BiFtEgWhG5Qq7FfgYpm',
       firstName: 'Sarah',
       lastName: 'Chen',
       status: 'ACTIVE'

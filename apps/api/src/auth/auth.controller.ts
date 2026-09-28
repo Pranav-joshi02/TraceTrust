@@ -1,84 +1,34 @@
-import { Body, Controller, Get, Post, UnauthorizedException, Headers } from '@nestjs/common';
-import { sha256 } from '@trusttrace/crypto';
-import { PrismaService } from '../common/prisma/prisma.service';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { AuthGuard } from '../common/guards/auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly authService: AuthService) {}
 
+  @Public()
+  @Post('register')
+  register(@Body() body: { email: string; password: string; firstName: string; lastName: string; organizationCode?: string }) {
+    return this.authService.register(body);
+  }
+
+  @Public()
   @Post('login')
-  async login(@Body() body: { email?: string; password?: string }) {
-    const email = body.email || 'admin@trusttrace.local';
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: {
-        organization: true,
-        roles: { include: { role: true } }
-      }
-    });
-
-    if (!user) {
-      throw new UnauthorizedException(`User with email '${email}' not found.`);
-    }
-
-    const tokenPayload = `${user.id}:${user.email}:${Date.now()}:${process.env.JWT_SECRET || 'trusttrace-secret'}`;
-    const accessToken = `tt-jwt.${Buffer.from(JSON.stringify({ sub: user.id, email: user.email })).toString('base64url')}.${sha256(tokenPayload).slice(0, 32)}`;
-
-    return {
-      accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: `${user.firstName} ${user.lastName}`,
-        organizationId: user.organizationId,
-        organizationName: user.organization?.name,
-        organizationCode: user.organization?.organizationCode,
-        roles: user.roles.map((r) => r.role.name)
-      }
-    };
+  login(@Body() body: { email?: string; password?: string }) {
+    return this.authService.login(body);
   }
 
   @Post('logout')
+  @UseGuards(AuthGuard)
   logout() {
-    return { ok: true, message: 'Logged out successfully' };
+    return { ok: true, message: 'Logged out successfully. Token should be discarded by client.' };
   }
 
   @Get('me')
-  async me(@Headers('authorization') authHeader?: string) {
-    // If bearer token provided with sub, parse it; otherwise default to primary admin
-    let email = 'admin@trusttrace.local';
-    if (authHeader && authHeader.startsWith('Bearer tt-jwt.')) {
-      try {
-        const parts = authHeader.split('.');
-        if (parts[1]) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
-          if (payload.email) email = payload.email;
-        }
-      } catch {
-        // fallback
-      }
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: {
-        organization: true,
-        roles: { include: { role: true } }
-      }
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: `${user.firstName} ${user.lastName}`,
-      organizationId: user.organizationId,
-      organizationName: user.organization?.name,
-      organizationCode: user.organization?.organizationCode,
-      roles: user.roles.map((r) => r.role.name)
-    };
+  @UseGuards(AuthGuard)
+  me(@CurrentUser('id') userId: string) {
+    return this.authService.me(userId);
   }
 }

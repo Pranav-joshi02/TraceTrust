@@ -7,11 +7,29 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
   const targetUrl = `${API_BASE.replace(/\/api$/, '')}/api/${path}${req.nextUrl.search}`;
 
   const headers = new Headers();
-  headers.set('Content-Type', req.headers.get('Content-Type') || 'application/json');
+  const contentType = req.headers.get('Content-Type');
+  if (contentType) {
+    headers.set('Content-Type', contentType);
+  }
+
+  // Forward Authorization header or auth token from cookie
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+  if (authHeader) {
+    headers.set('Authorization', authHeader);
+  } else {
+    const token = req.cookies.get('tt_auth_token')?.value;
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
 
   let body: BodyInit | null = null;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    body = await req.text();
+    if (contentType?.includes('multipart/form-data')) {
+      body = await req.arrayBuffer();
+    } else {
+      body = await req.text();
+    }
   }
 
   try {

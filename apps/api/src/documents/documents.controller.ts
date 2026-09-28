@@ -1,7 +1,10 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
+import { AuthGuard } from '../common/guards/auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 
 @Controller('documents')
+@UseGuards(AuthGuard, RolesGuard)
 export class DocumentsController {
   constructor(private readonly documents: DocumentsService) {}
 

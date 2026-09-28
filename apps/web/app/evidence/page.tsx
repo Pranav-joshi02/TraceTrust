@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
 import { mockDocuments, DocumentEvidence, mockTraceEvents, TraceEvent, mockOrganizations, Organization } from '../../lib/data';
-import { fetchDocuments, createDocument, verifyEvidenceDocument, fetchEvents, fetchOrganizations } from '../../lib/api';
+import { fetchDocuments, createDocument, verifyEvidenceDocument, fetchEvents, fetchOrganizations, uploadEvidenceFile } from '../../lib/api';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { FileCheck2, FileText, CheckCircle2, XCircle, Search, Upload, RefreshCw, Lock, X } from 'lucide-react';
+import { FileCheck2, FileText, CheckCircle2, XCircle, Search, Upload, RefreshCw, Lock, X, Hash } from 'lucide-react';
 
 export default function EvidencePage() {
   const [documents, setDocuments] = useState<DocumentEvidence[]>(mockDocuments);
@@ -17,8 +17,11 @@ export default function EvidencePage() {
   const [verificationResult, setVerificationResult] = useState<'MATCH' | 'MISMATCH' | null>('MATCH');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Upload modal state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [computedHash, setComputedHash] = useState('');
   const [fileName, setFileName] = useState('');
   const [eventLink, setEventLink] = useState(mockTraceEvents[0].eventCode);
   const [orgId, setOrgId] = useState(mockOrganizations[0].id);
@@ -95,42 +98,91 @@ export default function EvidencePage() {
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setFileName(file.name);
+    const sizeInKb = (file.size / 1024).toFixed(1);
+    setFileSizeStr(file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : `${sizeInKb} KB`);
+    try {
+      const buffer = await file.arrayBuffer();
+      const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(digest));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      setComputedHash(hashHex);
+    } catch {
+      // fallback
+    }
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fileName) return;
 
+    setIsUploading(true);
     const matchedOrg = orgList.find((o) => o.id === orgId) || orgList[0] || mockOrganizations[0];
-    const fakeHash = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    const newDoc: DocumentEvidence = {
-      id: `doc-${Date.now()}`,
-      fileName,
-      eventCode: eventLink,
-      organizationName: matchedOrg.name,
-      fileSize: fileSizeStr,
-      mimeType: 'application/pdf',
-      storageProvider: 'minio-s3',
-      sha256Hash: fakeHash,
-      uploadedAt: new Date().toISOString().split('T')[0],
-      verifiedStatus: 'MATCHED'
-    };
 
-    setDocuments([newDoc, ...documents]);
-    setSelectedDoc(newDoc);
-    setIsModalOpen(false);
-    setFileName('');
+    try {
+      let finalHash = computedHash;
+      let finalProvider = 'minio-s3';
+      let finalDocId = `doc-${Date.now()}`;
 
-    await createDocument({
-      id: newDoc.id,
-      fileName: newDoc.fileName,
-      mimeType: 'application/pdf',
-      fileSize: fileSizeStr,
-      storageProvider: 'minio-s3',
-      sha256Hash: fakeHash,
-      organizationName: matchedOrg.name,
-      organizationId: matchedOrg.id,
-      organizationCode: matchedOrg.organizationCode,
-      eventCode: eventLink
-    });
+      if (selectedFile) {
+        // Upload real file to MinIO via API
+        const uploaded = await uploadEvidenceFile(selectedFile, {
+          organizationId: matchedOrg.id,
+          organizationCode: matchedOrg.organizationCode,
+          eventCode: eventLink,
+        });
+        if (uploaded) {
+          finalHash = uploaded.sha256Hash || computedHash;
+          finalProvider = uploaded.storageProvider || 'minio-s3';
+          finalDocId = uploaded.id || finalDocId;
+        }
+      } else {
+        // Fallback metadata creation
+        if (!finalHash) {
+          finalHash = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        }
+        await createDocument({
+          id: finalDocId,
+          fileName,
+          mimeType: 'application/pdf',
+          fileSize: fileSizeStr,
+          storageProvider: 'minio-s3',
+          sha256Hash: finalHash,
+          organizationName: matchedOrg.name,
+          organizationId: matchedOrg.id,
+          organizationCode: matchedOrg.organizationCode,
+          eventCode: eventLink,
+        });
+      }
+
+      const newDoc: DocumentEvidence = {
+        id: finalDocId,
+        fileName,
+        eventCode: eventLink,
+        organizationName: matchedOrg.name,
+        fileSize: fileSizeStr,
+        mimeType: selectedFile?.type || 'application/pdf',
+        storageProvider: finalProvider,
+        sha256Hash: finalHash,
+        uploadedAt: new Date().toISOString().split('T')[0],
+        verifiedStatus: 'MATCHED',
+      };
+
+      setDocuments([newDoc, ...documents]);
+      setSelectedDoc(newDoc);
+      setIsModalOpen(false);
+      setFileName('');
+      setSelectedFile(null);
+      setComputedHash('');
+    } catch (err: any) {
+      alert(`Upload error: ${err.message || 'Failed to upload document.'}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -296,9 +348,21 @@ export default function EvidencePage() {
             </div>
 
             <form onSubmit={handleUpload} className="mt-4 space-y-3 text-xs">
+              {/* Actual File Input */}
               <div>
-                <label className="font-mono font-medium text-ink">File Name *</label>
+                <label htmlFor="evidence-file-picker" className="font-mono font-medium text-ink">Select Evidence File (PDF, Image, Certificate) *</label>
                 <input
+                  id="evidence-file-picker"
+                  type="file"
+                  onChange={handleFileChange}
+                  className="mt-1 block w-full rounded-xl border border-line bg-paper p-2 font-mono text-xs text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-ink file:px-3 file:py-1 file:text-xs file:font-semibold file:text-paper hover:file:bg-ink/80"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="evidence-filename" className="font-mono font-medium text-ink">File Name *</label>
+                <input
+                  id="evidence-filename"
                   type="text"
                   required
                   placeholder="e.g. lab-analysis-pass-2026.pdf"
@@ -308,9 +372,20 @@ export default function EvidencePage() {
                 />
               </div>
 
+              {computedHash && (
+                <div className="rounded-xl border border-line bg-paper/70 p-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+                    <Hash className="h-3 w-3 text-verified" />
+                    <span className="font-bold text-ink">Computed SHA-256 Digest:</span>
+                  </div>
+                  <p className="mt-1 break-all font-mono text-[10px] text-ink">{computedHash}</p>
+                </div>
+              )}
+
               <div>
-                <label className="font-mono font-medium text-ink">Linked Event *</label>
+                <label htmlFor="evidence-event-link" className="font-mono font-medium text-ink">Linked Event *</label>
                 <select
+                  id="evidence-event-link"
                   required
                   value={eventLink}
                   onChange={(e) => setEventLink(e.target.value)}
@@ -325,8 +400,9 @@ export default function EvidencePage() {
               </div>
 
               <div>
-                <label className="font-mono font-medium text-ink">Uploading Organization *</label>
+                <label htmlFor="evidence-org" className="font-mono font-medium text-ink">Uploading Organization *</label>
                 <select
+                  id="evidence-org"
                   required
                   value={orgId}
                   onChange={(e) => setOrgId(e.target.value)}
@@ -341,8 +417,9 @@ export default function EvidencePage() {
               </div>
 
               <div>
-                <label className="font-mono font-medium text-ink">Document Size</label>
+                <label htmlFor="evidence-size" className="font-mono font-medium text-ink">Document Size</label>
                 <input
+                  id="evidence-size"
                   type="text"
                   value={fileSizeStr}
                   onChange={(e) => setFileSizeStr(e.target.value)}
@@ -351,7 +428,7 @@ export default function EvidencePage() {
               </div>
 
               <div className="rounded-xl border border-line bg-paper p-3 text-[11px] font-mono text-muted">
-                Encrypted document stored in ISO-compliant off-chain repository; cryptographic SHA-256 digest is immutably anchored.
+                Off-chain MinIO S3 object storage; cryptographic SHA-256 digest is immutably anchored to the ledger.
               </div>
 
               <div className="mt-6 flex justify-end gap-2 pt-2">
@@ -364,9 +441,10 @@ export default function EvidencePage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-full bg-ink px-5 py-2 font-mono font-medium text-paper hover:bg-ink/90"
+                  disabled={isUploading}
+                  className="rounded-full bg-ink px-5 py-2 font-mono font-medium text-paper hover:bg-ink/90 disabled:opacity-50"
                 >
-                  Secure Document Evidence
+                  {isUploading ? 'Uploading...' : 'Secure Document Evidence'}
                 </button>
               </div>
             </form>

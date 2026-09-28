@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { BatchesModule } from './batches/batches.module';
 import { EventsModule } from './events/events.module';
@@ -18,10 +19,12 @@ import { QrCodesModule } from './qr-codes/qr-codes.module';
 import { EvidenceModule } from './evidence/evidence.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { MinioModule } from './common/minio/minio.module';
 
 @Module({
   imports: [
     PrismaModule,
+    MinioModule,
     HealthModule,
     AuthModule,
     OrganizationsModule,

@@ -1,11 +1,16 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { BatchesService } from './batches.service';
+import { AuthGuard } from '../common/guards/auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @Controller('batches')
+@UseGuards(AuthGuard, RolesGuard)
 export class BatchesController {
   constructor(private readonly batches: BatchesService) {}
 
   @Post()
+  @Roles('admin', 'operator')
   create(@Body() body: Record<string, unknown>) {
     return this.batches.create(body);
   }

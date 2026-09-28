@@ -7,6 +7,7 @@ import { AppShell } from '../../../components/layout/AppShell';
 import { mockTraceEvents, TraceEvent } from '../../../lib/data';
 import { fetchEventById, fetchEvents } from '../../../lib/api';
 import { StatusPill } from '../../../components/ui/StatusPill';
+import { EndorsementPanel } from '../../../components/trust/EndorsementPanel';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -250,34 +251,8 @@ export default function EventInvestigationPage() {
               </div>
             </div>
 
-            {/* Endorsement Card */}
-            <div className="rounded-2xl border border-line bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between border-b border-line pb-3">
-                <h4 className="font-bold text-ink">Consortium Multi-Party Endorsements</h4>
-                <span className="font-mono text-[11px] text-muted">2-of-3 Rule</span>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {event.endorsements.map((end, idx) => (
-                  <div key={idx} className="rounded-xl border border-line bg-paper/50 p-3 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-ink">{end.orgName}</span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
-                          end.decision === 'APPROVED'
-                            ? 'bg-verified/10 text-verified'
-                            : 'bg-rejected/10 text-rejected'
-                        }`}
-                      >
-                        {end.decision}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-muted text-[11px]">{end.comment}</p>
-                    <span className="mt-1.5 block font-mono text-[10px] text-muted">{end.signedAt}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Interactive Multi-Party Endorsement Panel */}
+            <EndorsementPanel eventId={event.id || id} eventCode={event.eventCode} />
           </div>
         </div>
       )}

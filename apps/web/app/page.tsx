@@ -24,6 +24,7 @@ import { CliDemo } from '../components/marketing/CliDemo';
 import { SupplyChainGraph } from '../components/marketing/SupplyChainGraph';
 import { TrustVerificationPanel } from '../components/trust/TrustVerificationPanel';
 import { StatusPill } from '../components/ui/StatusPill';
+import { useAuthStore } from '../lib/auth-store';
 
 const architecture = [
   { label: 'Data capture', icon: Database, detail: 'Products, batches, and supply-chain events enter through API, web, or CLI.' },
@@ -42,6 +43,7 @@ const stats = [
 ];
 
 export default function Home() {
+  const { isAuthenticated } = useAuthStore();
   const [cliMode, setCliMode] = useState<'create' | 'verify' | 'trace' | 'audit'>('verify');
 
   return (
@@ -65,13 +67,23 @@ export default function Home() {
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-paper transition hover:bg-ink/85 shadow-sm"
-            >
-              <span>Launch Console</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-paper transition hover:bg-ink/85 shadow-sm"
+              >
+                <span>Launch Console</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-paper transition hover:bg-ink/85 shadow-sm"
+              >
+                <span>Get Started</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
             <Link
               href="/trace"
               className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-5 py-3 text-sm font-medium text-ink transition hover:bg-paper"
