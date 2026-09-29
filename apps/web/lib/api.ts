@@ -74,11 +74,14 @@ async function handleApiError(res: Response, action: string): Promise<never> {
 // ==========================================
 export async function fetchProducts(): Promise<Product[]> {
   try {
-    const res = await fetch(`${BASE_URL}/api/products`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch products');
+    const res = await fetch(`${BASE_URL}/api/products`, {
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error(`Failed to fetch products: ${res.status}`);
     const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      const mapped: Product[] = data.map((p: any) => ({
+    if (Array.isArray(data)) {
+      return data.map((p: any) => ({
         id: p.id,
         productCode: p.productCode,
         sku: p.sku || 'SKU-GEN',
@@ -93,19 +96,11 @@ export async function fetchProducts(): Promise<Product[]> {
         organizationCode: p.organization?.organizationCode || 'SUPPLIER-001',
         metadata: p.metadata || {}
       }));
-      const local = getLocal<Product[]>('products', []);
-      const localOnly = local.filter(
-        (lp) => !['prod-1', 'prod-2', 'prod-3'].includes(lp.id) &&
-                !mapped.some((mp) => mp.productCode === lp.productCode || mp.id === lp.id)
-      );
-      const merged = [...mapped, ...localOnly];
-      setLocal('products', merged);
-      return merged;
     }
   } catch (err) {
-    console.warn('API error, using cached products:', err);
+    console.warn('API error fetching products:', err);
   }
-  return getLocal('products', mockProducts);
+  return mockProducts;
 }
 
 export async function createProduct(payload: Partial<Product> & { organizationCode?: string }): Promise<Product> {
@@ -147,11 +142,14 @@ export async function createProduct(payload: Partial<Product> & { organizationCo
 // ==========================================
 export async function fetchBatches(): Promise<Batch[]> {
   try {
-    const res = await fetch(`${BASE_URL}/api/batches`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch batches');
+    const res = await fetch(`${BASE_URL}/api/batches`, {
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error(`Failed to fetch batches: ${res.status}`);
     const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      const mapped: Batch[] = data.map((b: any) => ({
+    if (Array.isArray(data)) {
+      return data.map((b: any) => ({
         id: b.id,
         batchCode: b.batchCode,
         productId: b.productId,
@@ -159,26 +157,21 @@ export async function fetchBatches(): Promise<Batch[]> {
         productName: b.product?.name || 'Organic Arabica Coffee Reserve',
         quantity: Number(b.quantity),
         unit: b.unit || 'kg',
-        productionDate: b.productionDate ? new Date(b.productionDate).toISOString().split('T')[0] : '2026-09-12',
-        expiryDate: b.expiryDate ? new Date(b.expiryDate).toISOString().split('T')[0] : '2027-09-12',
+        productionDate: b.productionDate ? new Date(b.productionDate).toISOString().split('T')[0] : '',
+        expiryDate: b.expiryDate ? new Date(b.expiryDate).toISOString().split('T')[0] : '',
         currentOwnerOrgId: b.currentOwnerOrgId,
         currentOwnerName: b.currentOwner?.name || 'Highland Organics Estate',
         currentOwnerCode: b.currentOwner?.organizationCode,
-        status: b.status || 'AVAILABLE',
-        originLocation: b.originLocation || 'Coorg, Karnataka, India',
-        trustScore: 98,
+        status: b.status || 'CREATED',
+        originLocation: b.originLocation || '',
+        trustScore: 95,
         trustStatus: 'VERIFIED'
       }));
-      const local = getLocal<Batch[]>('batches', []);
-      const localOnly = local.filter((lb) => !mapped.some((mb) => mb.batchCode === lb.batchCode || mb.id === lb.id));
-      const merged = [...mapped, ...localOnly];
-      setLocal('batches', merged);
-      return merged;
     }
   } catch (err) {
-    console.warn('API error, using cached batches:', err);
+    console.warn('API error fetching batches:', err);
   }
-  return getLocal('batches', mockBatches);
+  return mockBatches;
 }
 
 export async function createBatch(payload: Partial<Batch> & { productCode?: string; currentOwnerCode?: string }): Promise<Batch> {

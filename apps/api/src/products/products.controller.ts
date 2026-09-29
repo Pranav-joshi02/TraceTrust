@@ -4,6 +4,7 @@ import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('products')
 @UseGuards(AuthGuard, RolesGuard)
@@ -17,11 +18,13 @@ export class ProductsController {
   }
 
   @Get()
+  @Public()
   list() {
     return this.products.list();
   }
 
   @Get(':id')
+  @Public()
   show(@Param('id') id: string) {
     return this.products.show(id);
   }

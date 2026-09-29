@@ -14,20 +14,31 @@ export class EventsService {
     });
     if (!batch) throw new NotFoundException('Batch not found');
 
-    // Determine source organization: non-admins are locked to their own org
-    let sourceOrgId: string;
+    // Determine source organization: explicit override if provided (admins), otherwise user org or batch owner
+    let sourceOrgId: string | undefined = undefined;
     const isAdmin = user?.roles?.includes('ADMIN');
+    const explicitSourceCodeOrId = body.sourceOrgId || body.sourceOrganization || body.sourceOrgCode;
 
-    if (user?.organizationId && !isAdmin) {
-      // Non-admin: force to their own organization, ignore body field
-      sourceOrgId = user.organizationId;
-    } else {
-      // Admin or no user context: resolve from body
+    if (isAdmin && explicitSourceCodeOrId) {
       const source = await this.prisma.organization.findFirst({
-        where: { OR: [{ id: String(body.sourceOrgId ?? '') }, { organizationCode: String(body.sourceOrganization ?? body.sourceOrgCode ?? '') }] }
+        where: { OR: [{ id: String(explicitSourceCodeOrId) }, { organizationCode: String(explicitSourceCodeOrId) }] }
       });
-      if (!source) throw new NotFoundException('Source organization not found');
+      if (!source) throw new NotFoundException(`Source organization '${explicitSourceCodeOrId}' not found`);
       sourceOrgId = source.id;
+    } else if (user?.organizationId) {
+      sourceOrgId = user.organizationId;
+    } else if (explicitSourceCodeOrId) {
+      const source = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(explicitSourceCodeOrId) }, { organizationCode: String(explicitSourceCodeOrId) }] }
+      });
+      if (!source) throw new NotFoundException(`Source organization '${explicitSourceCodeOrId}' not found`);
+      sourceOrgId = source.id;
+    } else if (batch.currentOwnerOrgId) {
+      sourceOrgId = batch.currentOwnerOrgId;
+    } else {
+      const firstOrg = await this.prisma.organization.findFirst();
+      if (!firstOrg) throw new NotFoundException('Source organization not found');
+      sourceOrgId = firstOrg.id;
     }
 
     const source = await this.prisma.organization.findUnique({ where: { id: sourceOrgId } });

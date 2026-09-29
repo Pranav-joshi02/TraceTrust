@@ -1,13 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 import { createHash } from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+
+const DEFAULT_PASSWORD = 'Password123!';
+const SALT_ROUNDS = 10;
 
 function getHash(data: string): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
 async function main() {
+  // Generate a real bcrypt hash for the default seed password
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, SALT_ROUNDS);
+  console.log(`Default seed password: ${DEFAULT_PASSWORD}`);
+  console.log(`Generated bcrypt hash: ${passwordHash.slice(0, 30)}...`);
   console.log('Seeding TrustTrace Supabase / PostgreSQL database...');
 
   // 1. Roles & Permissions
@@ -147,11 +155,11 @@ async function main() {
   // 3. Admin & Operator Users
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@trusttrace.local' },
-    update: {},
+    update: { passwordHash },
     create: {
       organizationId: supplierOrg.id,
       email: 'admin@trusttrace.local',
-      passwordHash: '$2b$10$039V.DNPAnRXfOOPh0t.je3H7BcEDutbG2BiFtEgWhG5Qq7FfgYpm',
+      passwordHash,
       firstName: 'Pranav',
       lastName: 'Joshi',
       status: 'ACTIVE'
@@ -166,11 +174,11 @@ async function main() {
 
   const operatorUser = await prisma.user.upsert({
     where: { email: 'operator@highlandorganics.example' },
-    update: {},
+    update: { passwordHash },
     create: {
       organizationId: supplierOrg.id,
       email: 'operator@highlandorganics.example',
-      passwordHash: '$2b$10$039V.DNPAnRXfOOPh0t.je3H7BcEDutbG2BiFtEgWhG5Qq7FfgYpm',
+      passwordHash,
       firstName: 'Rajesh',
       lastName: 'Kumar',
       status: 'ACTIVE'
@@ -185,11 +193,11 @@ async function main() {
 
   const auditorUser = await prisma.user.upsert({
     where: { email: 'auditor@sgs-verify.example' },
-    update: {},
+    update: { passwordHash },
     create: {
       organizationId: auditorOrg.id,
       email: 'auditor@sgs-verify.example',
-      passwordHash: '$2b$10$039V.DNPAnRXfOOPh0t.je3H7BcEDutbG2BiFtEgWhG5Qq7FfgYpm',
+      passwordHash,
       firstName: 'Sarah',
       lastName: 'Chen',
       status: 'ACTIVE'

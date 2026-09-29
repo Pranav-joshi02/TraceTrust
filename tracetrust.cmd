@@ -1,0 +1,2 @@
+@ECHO off
+node "%~dp0apps\cli\dist\index.js" %*

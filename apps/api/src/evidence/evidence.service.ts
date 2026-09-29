@@ -89,24 +89,32 @@ export class EvidenceService {
   }
 
   private async findOrganization(body: Record<string, unknown>, user?: any) {
-    // Non-admins are locked to their own organization
     const isAdmin = user?.roles?.includes('ADMIN');
-    if (user?.organizationId && !isAdmin) {
-      const org = await this.prisma.organization.findUnique({ where: { id: user.organizationId } });
-      if (!org) throw new NotFoundException('Organization not found');
+    const explicitOrgCodeOrId = body.organizationId || body.organizationCode;
+
+    if (isAdmin && explicitOrgCodeOrId) {
+      const org = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(explicitOrgCodeOrId) }, { organizationCode: String(explicitOrgCodeOrId) }] }
+      });
+      if (!org) throw new NotFoundException(`Organization '${explicitOrgCodeOrId}' not found`);
       return org;
     }
 
-    const org = await this.prisma.organization.findFirst({
-      where: {
-        OR: [
-          { id: String(body.organizationId ?? '') },
-          { organizationCode: String(body.organizationCode ?? '') }
-        ]
-      }
-    });
-    if (!org) throw new NotFoundException('Organization not found');
-    return org;
+    if (user?.organizationId) {
+      const org = await this.prisma.organization.findUnique({ where: { id: user.organizationId } });
+      if (org) return org;
+    }
+
+    if (explicitOrgCodeOrId) {
+      const org = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(explicitOrgCodeOrId) }, { organizationCode: String(explicitOrgCodeOrId) }] }
+      });
+      if (org) return org;
+    }
+
+    const firstOrg = await this.prisma.organization.findFirst();
+    if (!firstOrg) throw new NotFoundException('Organization not found');
+    return firstOrg;
   }
 
   async list() {

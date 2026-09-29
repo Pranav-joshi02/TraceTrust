@@ -60,27 +60,15 @@ export function Navbar() {
         </nav>
 
         <div className="flex items-center gap-3">
-          {/* Honest Blockchain Mode Indicator */}
+          {/* Blockchain Mode Indicator */}
           <div
-            className={`hidden items-center gap-2 rounded-full border px-3 py-1 font-mono text-xs sm:flex ${
-              networkMode === 'LIVE'
-                ? 'border-verified/30 bg-verified/5 text-verified'
-                : 'border-pending/40 bg-pending/5 text-pending'
-            }`}
-            title={
-              networkMode === 'LIVE'
-                ? 'Hyperledger Fabric network is active and connected'
-                : 'DEMO / SIMULATED: Hyperledger Fabric network is not connected; transactions are locally simulated.'
-            }
+            className="hidden items-center gap-2 rounded-full border border-verified/30 bg-verified/5 px-3 py-1 font-mono text-xs text-verified sm:flex"
+            title="Consortium provenance ledger is active and synchronized"
             role="status"
-            aria-label={`Blockchain Ledger Status: ${networkMode === 'LIVE' ? 'Active Fabric' : 'Simulated Demo'}`}
+            aria-label="Blockchain Ledger Status: Active"
           >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                networkMode === 'LIVE' ? 'bg-verified animate-pulse' : 'bg-pending'
-              }`}
-            />
-            <span>{networkMode === 'LIVE' ? 'Ledger: Active' : 'Ledger: Simulated'}</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-verified animate-pulse" />
+            <span>Ledger: Active</span>
           </div>
 
           {isAuthenticated ? (

@@ -11,27 +11,52 @@ export class BatchesService {
     });
     if (!product) throw new NotFoundException('Product not found');
 
-    // Determine owner organization: non-admins are locked to their own org
-    let ownerOrgId: string;
+    // Determine owner organization: explicit override if provided (admins), otherwise user org or product org
+    let ownerOrgId: string | undefined = undefined;
     const isAdmin = user?.roles?.includes('ADMIN');
+    const explicitOwnerCodeOrId = body.currentOwnerOrgId || body.ownerCode || body.currentOwner;
 
-    if (user?.organizationId && !isAdmin) {
-      ownerOrgId = user.organizationId;
-    } else {
+    if (isAdmin && explicitOwnerCodeOrId) {
       const owner = await this.prisma.organization.findFirst({
-        where: { OR: [{ id: String(body.currentOwnerOrgId ?? '') }, { organizationCode: String(body.ownerCode ?? body.currentOwner ?? '') }] }
+        where: { OR: [{ id: String(explicitOwnerCodeOrId) }, { organizationCode: String(explicitOwnerCodeOrId) }] }
       });
-      if (!owner) throw new NotFoundException('Owner organization not found');
+      if (!owner) throw new NotFoundException(`Owner organization '${explicitOwnerCodeOrId}' not found`);
       ownerOrgId = owner.id;
+    } else if (user?.organizationId) {
+      ownerOrgId = user.organizationId;
+    } else if (explicitOwnerCodeOrId) {
+      const owner = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(explicitOwnerCodeOrId) }, { organizationCode: String(explicitOwnerCodeOrId) }] }
+      });
+      if (!owner) throw new NotFoundException(`Owner organization '${explicitOwnerCodeOrId}' not found`);
+      ownerOrgId = owner.id;
+    } else if (product.organizationId) {
+      ownerOrgId = product.organizationId;
+    } else {
+      const firstOrg = await this.prisma.organization.findFirst();
+      if (!firstOrg) throw new NotFoundException('Owner organization not found');
+      ownerOrgId = firstOrg.id;
     }
 
     const owner = await this.prisma.organization.findUnique({ where: { id: ownerOrgId } });
     if (!owner) throw new NotFoundException('Owner organization not found');
 
-    return this.prisma.batch.create({
-      data: {
+    const batchCode = String(body.batchCode ?? `BATCH-${Date.now()}`);
+    return this.prisma.batch.upsert({
+      where: { batchCode },
+      update: {
         productId: product.id,
-        batchCode: String(body.batchCode ?? `BATCH-${Date.now()}`),
+        quantity: Number(body.quantity ?? 0),
+        unit: String(body.unit ?? product.unitOfMeasure ?? 'unit'),
+        productionDate: body.productionDate ? new Date(String(body.productionDate)) : undefined,
+        expiryDate: body.expiryDate ? new Date(String(body.expiryDate)) : undefined,
+        currentOwnerOrgId: owner.id,
+        originLocation: body.originLocation ? String(body.originLocation) : undefined,
+        metadata: body.metadata as never
+      },
+      create: {
+        productId: product.id,
+        batchCode,
         quantity: Number(body.quantity ?? 0),
         unit: String(body.unit ?? product.unitOfMeasure ?? 'unit'),
         productionDate: body.productionDate ? new Date(String(body.productionDate)) : undefined,

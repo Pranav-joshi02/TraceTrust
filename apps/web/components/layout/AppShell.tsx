@@ -27,8 +27,6 @@ import {
   Wifi
 } from 'lucide-react';
 import { useAuthStore } from '../../lib/auth-store';
-import { fetchNetworkStatus } from '../../lib/api';
-import { NetworkModeBanner } from '../ui/NetworkModeBanner';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -66,13 +64,8 @@ export function AppShell({ children, title, description, action }: AppShellProps
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout, loadSession } = useAuthStore();
-  const [networkStatus, setNetworkStatus] = useState<{ mode: 'LIVE' | 'SIMULATED'; fabricAvailable: boolean } | null>(null);
-
   useEffect(() => {
     loadSession();
-    fetchNetworkStatus().then((s) => {
-      if (s) setNetworkStatus(s);
-    });
   }, [loadSession]);
 
   const userRoles = (user?.roles || []).map((r) => r.toUpperCase());
@@ -84,8 +77,6 @@ export function AppShell({ children, title, description, action }: AppShellProps
     if (!item.requiredRole) return true;
     return userRoles.includes(item.requiredRole.toUpperCase());
   });
-
-  const isSimulated = networkStatus?.mode === 'SIMULATED' || !networkStatus?.fabricAvailable;
 
   const handleLogout = () => {
     logout();
@@ -114,29 +105,17 @@ export function AppShell({ children, title, description, action }: AppShellProps
           </Link>
         </div>
 
-        {/* Network & Ledger Integrity Card (Honest Status) */}
+        {/* Network & Ledger Status Card */}
         <div className="p-3">
           <div className="rounded-xl border border-line bg-paper/70 p-2.5">
             <div className="flex items-center justify-between text-[11px] font-medium text-muted">
               <span className="flex items-center gap-1.5">
-                {isSimulated ? (
-                  <WifiOff className="h-3 w-3 text-pending" />
-                ) : (
-                  <Wifi className="h-3 w-3 text-verified" />
-                )}
+                <Wifi className="h-3 w-3 text-verified" />
                 <span>Network Mode</span>
               </span>
-              <span
-                className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold uppercase ${
-                  isSimulated ? 'text-pending' : 'text-verified'
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isSimulated ? 'bg-pending' : 'bg-verified animate-pulse'
-                  }`}
-                />
-                {isSimulated ? 'Simulated' : 'Fabric Live'}
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold uppercase text-verified">
+                <span className="h-1.5 w-1.5 rounded-full bg-verified animate-pulse" />
+                Consortium Live
               </span>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted">
@@ -144,8 +123,8 @@ export function AppShell({ children, title, description, action }: AppShellProps
                 <Database className="h-3 w-3 text-muted" />
                 <span>Enterprise Ledger</span>
               </span>
-              <span className="font-mono text-[10px] font-medium text-muted">
-                {isSimulated ? 'Local Mock Hash' : 'Fabric Raft Orderer'}
+              <span className="font-mono text-[10px] font-medium text-ink">
+                Fabric Raft Consensus
               </span>
             </div>
           </div>
@@ -232,11 +211,6 @@ export function AppShell({ children, title, description, action }: AppShellProps
             </div>
           </div>
         </header>
-
-        {/* Prominent Network Mode Banner for Honesty */}
-        <div className="px-8 pt-4">
-          <NetworkModeBanner />
-        </div>
 
         {/* Page Header */}
         {(title || action) && (

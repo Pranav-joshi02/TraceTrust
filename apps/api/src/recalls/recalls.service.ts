@@ -7,18 +7,29 @@ export class RecallsService {
   constructor(private readonly prisma: PrismaService) { }
 
   async create(body: Record<string, unknown>, user?: any) {
-    // Determine initiating organization: non-admins locked to their own org
-    let orgId: string;
+    // Determine initiating organization: explicit override if provided (admins), otherwise user org
+    let orgId: string | undefined = undefined;
     const isAdmin = user?.roles?.includes('ADMIN');
+    const explicitOrgCodeOrId = body.initiatedByOrgId || body.organizationCode;
 
-    if (user?.organizationId && !isAdmin) {
-      orgId = user.organizationId;
-    } else {
+    if (isAdmin && explicitOrgCodeOrId) {
       const organization = await this.prisma.organization.findFirst({
-        where: { OR: [{ id: String(body.initiatedByOrgId ?? '') }, { organizationCode: String(body.organizationCode ?? '') }] }
+        where: { OR: [{ id: String(explicitOrgCodeOrId) }, { organizationCode: String(explicitOrgCodeOrId) }] }
       });
-      if (!organization) throw new NotFoundException('Organization not found');
+      if (!organization) throw new NotFoundException(`Organization '${explicitOrgCodeOrId}' not found`);
       orgId = organization.id;
+    } else if (user?.organizationId) {
+      orgId = user.organizationId;
+    } else if (explicitOrgCodeOrId) {
+      const organization = await this.prisma.organization.findFirst({
+        where: { OR: [{ id: String(explicitOrgCodeOrId) }, { organizationCode: String(explicitOrgCodeOrId) }] }
+      });
+      if (!organization) throw new NotFoundException(`Organization '${explicitOrgCodeOrId}' not found`);
+      orgId = organization.id;
+    } else {
+      const firstOrg = await this.prisma.organization.findFirst();
+      if (!firstOrg) throw new NotFoundException('Organization not found');
+      orgId = firstOrg.id;
     }
 
     const organization = await this.prisma.organization.findUnique({ where: { id: orgId } });

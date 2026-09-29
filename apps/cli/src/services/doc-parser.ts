@@ -209,43 +209,54 @@ export function parseDocument(filePath: string): ParsedManifest {
   for (const item of rawDocs) {
     if (!item || typeof item !== 'object') continue;
 
-    // Check if item is a wrapper containing { products: [...], batches: [...] }
-    if (Array.isArray(item.products)) {
-      for (const p of item.products) {
-        normalizeProduct(p, filename, products);
-      }
-    }
-    if (Array.isArray(item.batches)) {
-      for (const b of item.batches) {
-        normalizeBatch(b, filename, batches);
-      }
-    }
+    let parentProductCode: string | undefined = undefined;
+    let parentProductName: string | undefined = undefined;
 
     // Check if item has a single { product: {...}, batches: [...] } manifest structure
     if (item.product && typeof item.product === 'object') {
       const prod = normalizeProduct(item.product, filename, products);
-      // Link child batches if productCode is defined
-      if (Array.isArray(item.batches) && prod?.productCode) {
-        for (const b of item.batches) {
-          if (!b.productCode && !b.productId) {
-            b.productCode = prod.productCode;
-          }
+      if (prod) {
+        parentProductCode = prod.productCode;
+        parentProductName = prod.name;
+      }
+    }
+
+    // Check if item has { products: [...] }
+    if (Array.isArray(item.products)) {
+      for (const p of item.products) {
+        const prod = normalizeProduct(p, filename, products);
+        if (prod && !parentProductCode) {
+          parentProductCode = prod.productCode;
+          parentProductName = prod.name;
         }
       }
     }
 
-    // Check if this item is directly a batch
-    const isExplicitBatch = item.type === 'BATCH' || item.type === 'batch' || ('quantity' in item && ('productCode' in item || 'product' in item || 'batchCode' in item));
-    const isExplicitProduct = item.type === 'PRODUCT' || item.type === 'product' || ('name' in item && !('quantity' in item));
+    // Now normalize batches (inheriting parent productCode if missing)
+    if (Array.isArray(item.batches)) {
+      for (const b of item.batches) {
+        if (!b.productCode && !b.productId && !b.product) {
+          if (parentProductCode) b.productCode = parentProductCode;
+          if (parentProductName && !b.productName) b.productName = parentProductName;
+        }
+        normalizeBatch(b, filename, batches);
+      }
+    }
 
-    if (isExplicitBatch) {
-      normalizeBatch(item, filename, batches);
-    } else if (isExplicitProduct) {
-      normalizeProduct(item, filename, products);
-    } else if ('quantity' in item) {
-      normalizeBatch(item, filename, batches);
-    } else if ('name' in item) {
-      normalizeProduct(item, filename, products);
+    // Check if this item is directly a batch or product (if not already handled)
+    if (!item.product && !item.products && !item.batches) {
+      const isExplicitBatch = item.type === 'BATCH' || item.type === 'batch' || ('quantity' in item && ('productCode' in item || 'product' in item || 'batchCode' in item));
+      const isExplicitProduct = item.type === 'PRODUCT' || item.type === 'product' || ('name' in item && !('quantity' in item));
+
+      if (isExplicitBatch) {
+        normalizeBatch(item, filename, batches);
+      } else if (isExplicitProduct) {
+        normalizeProduct(item, filename, products);
+      } else if ('quantity' in item) {
+        normalizeBatch(item, filename, batches);
+      } else if ('name' in item) {
+        normalizeProduct(item, filename, products);
+      }
     }
   }
 
